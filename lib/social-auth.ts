@@ -229,9 +229,8 @@ export function getBaseUrl(): string {
   
   // Development fallback
   if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:3000';
+    return 'https://landing-page-new-delta.vercel.app/';
   }
   
   // Production fallback
-  return 'http://localhost:3000';
-}
+  return 'https://landing-page-new-delta.vercel.app/';
