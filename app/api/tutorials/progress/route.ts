@@ -1,7 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
-import { createClient } from '@/utils/supabase/server'
+import { createClient as createServerClient } from '@/utils/supabase/server'
+
+async function getUserFromRequest(request: Request) {
+  // Try cookie-based server client
+  try {
+    const supabase = await createServerClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (!error && user) return user
+  } catch (e) {}
+
+  // Fallback to Authorization header Bearer token
+  const auth = (request as any).headers?.get?.('authorization') || ''
+  const match = auth.match?.(/^Bearer (.+)$/i)
+  if (match) {
+    const token = match[1]
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+        }
+      })
+      if (res.ok) return await res.json()
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return null
+}
 
 // Helper: resolve database user (try id -> fallback to email)
 async function resolveDbUser(supabaseUser: any) {
@@ -16,14 +45,8 @@ async function resolveDbUser(supabaseUser: any) {
 // GET /api/tutorials/progress?tutorialId=...
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      console.error('Supabase auth error:', error)
+    const user = await getUserFromRequest(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -35,13 +58,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (!process.env.DATABASE_URL) {
-      // No DB configured: behave as if there's no saved progress
-      return NextResponse.json({ error: 'Tutorial progress not found' }, { status: 404 })
+      // No DB configured: return sensible default (no progress)
+      return NextResponse.json({ completed: false, currentStep: 0 })
     }
 
     const dbUser = await resolveDbUser(user)
     if (!dbUser) {
-      return NextResponse.json({ error: 'Tutorial progress not found' }, { status: 404 })
+      // If no DB user, treat as no progress
+      return NextResponse.json({ completed: false, currentStep: 0 })
     }
 
     const userTutorial = await prisma.userTutorial.findUnique({
@@ -49,7 +73,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!userTutorial) {
-      return NextResponse.json({ error: 'Tutorial progress not found' }, { status: 404 })
+      return NextResponse.json({ completed: false, currentStep: 0 })
     }
 
     return NextResponse.json({
@@ -71,14 +95,8 @@ export async function GET(request: NextRequest) {
 // POST /api/tutorials/progress
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      console.error('Supabase auth error:', error)
+    const user = await getUserFromRequest(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -164,14 +182,8 @@ export async function POST(request: NextRequest) {
 // PUT /api/tutorials/progress
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      console.error('Supabase auth error:', error)
+    const user = await getUserFromRequest(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
