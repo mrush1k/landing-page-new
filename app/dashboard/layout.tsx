@@ -196,8 +196,8 @@ export default function DashboardLayout({
           </div>
 
           {/* Main content */}
-          <div className="lg:pl-64 flex flex-col flex-1 min-h-screen">
-            <main className="flex-1 mobile-padding lg:p-6">
+          <div className="lg:ml-64 flex flex-col flex-1 min-h-screen max-w-full overflow-x-hidden">
+            <main className="flex-1 mobile-padding lg:p-6 min-w-0 max-w-full overflow-x-hidden">
               {children}
             </main>
           </div>

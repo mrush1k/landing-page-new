@@ -66,7 +66,7 @@ export function ColorPicker({ selectedColor, onColorChange, onSave, showPreview 
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full max-w-full overflow-x-hidden">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Palette className="w-5 h-5" />
@@ -76,7 +76,7 @@ export function ColorPicker({ selectedColor, onColorChange, onSave, showPreview 
           Choose a theme color that will be applied across the application
         </p>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 max-w-full overflow-x-hidden">
         {/* Current Selection Preview */}
         {showPreview && selectedColor && (
           <div className="space-y-2">
@@ -99,24 +99,24 @@ export function ColorPicker({ selectedColor, onColorChange, onSave, showPreview 
         {/* Predefined Colors */}
         <div className="space-y-3">
           <Label>Predefined Colors</Label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
             {predefinedColors.map((color) => (
               <button
                 key={color.value}
                 onClick={() => handlePredefinedColorSelect(color.value)}
                 className={cn(
-                  "relative p-3 rounded-lg border-2 transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
+                  "relative p-2 sm:p-3 rounded-lg border-2 transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 min-w-0",
                   selectedColor === color.value 
                     ? "border-blue-500 ring-2 ring-blue-500 ring-offset-2" 
                     : "border-gray-200 hover:border-gray-300"
                 )}
               >
                 <div 
-                  className="w-full h-12 rounded-md mb-2"
+                  className="w-full h-10 sm:h-12 rounded-md mb-2"
                   style={{ backgroundColor: color.value }}
                 />
-                <p className="text-xs font-medium text-center">{color.name}</p>
-                <p className="text-xs text-muted-foreground text-center">{color.value}</p>
+                <p className="text-xs font-medium text-center truncate">{color.name}</p>
+                <p className="text-xs text-muted-foreground text-center truncate">{color.value}</p>
                 {selectedColor === color.value && (
                   <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
                     <Check className="w-3 h-3 text-white" />

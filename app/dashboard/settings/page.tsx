@@ -10,11 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { Save, User, Building, Bell, Lock, Trash2, Download, MessageCircle, Bot, Palette, HardDrive, RefreshCw, Wand2, DollarSign, HelpCircle, BookOpen, Clock, FileText } from 'lucide-react'
+import { User, Building, Bell, Lock, Trash2, Download, MessageCircle, Bot, Palette, HardDrive, RefreshCw, Wand2, DollarSign, HelpCircle, BookOpen, Clock, FileText } from 'lucide-react'
+import SaveButton from '@/components/settings/SaveButton'
 import { User as UserType } from '@/lib/types'
 import { useToast } from '@/hooks/use-toast'
 import { ColorPicker } from '@/components/color-picker'
 import { useTheme } from '@/components/theme-provider'
+import SettingsCard from '@/components/settings/SettingsCard'
 import { cacheManager, getCacheStats } from '@/lib/cache-manager'
 import { TutorialPopup } from '@/components/tutorial-popup'
 import { generateTutorialForUser, getUserTutorial } from '@/lib/ai-tutorial'
@@ -593,15 +595,15 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-600">Manage your account and application preferences</p>
       </div>
 
       {/* Tab Navigation */}
-      <div className="border-b">
-        <nav className="flex space-x-8">
+      <div className="border-b overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
+        <nav className="flex space-x-4 sm:space-x-8 py-2 min-w-max">
           {tabs.map((tab) => {
             const Icon = tab.icon
             return (
@@ -617,7 +619,7 @@ export default function SettingsPage() {
                     checkTutorialStatus()
                   }
                 }}
-                className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm flex-shrink-0 whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -634,11 +636,8 @@ export default function SettingsPage() {
       {/* Profile Tab */}
       {activeTab === 'profile' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SettingsCard title="Personal Information">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="displayName">Display Name</Label>
@@ -813,25 +812,20 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleProfileSave} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Profile'}
-                </Button>
+                <SaveButton onClick={handleProfileSave} disabled={loading} loading={loading}>
+                  Save Profile
+                </SaveButton>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Company Tab */}
       {activeTab === 'company' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Company Settings</CardTitle>
-              <p className="text-sm text-gray-600">These details will appear on your invoices and receipts</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SettingsCard title="Company Settings" subtitle="These details will appear on your invoices and receipts">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="companyName">Company Name</Label>
@@ -942,25 +936,20 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleCompanySave} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Company Settings'}
-                </Button>
+                <SaveButton onClick={handleCompanySave} disabled={loading} loading={loading}>
+                  Save Company Settings
+                </SaveButton>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Branding Tab */}
       {activeTab === 'branding' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Logo & Branding</CardTitle>
-              <p className="text-sm text-gray-600">Manage your AI-generated and custom logos</p>
-            </CardHeader>
-            <CardContent className="py-8">
+          <SettingsCard title="Logo & Branding" subtitle="Manage your AI-generated and custom logos">
+            <div className="py-8">
               <div className="text-center">
                 <Wand2 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">Advanced Branding Management</h3>
@@ -972,20 +961,16 @@ export default function SettingsPage() {
                   Open Branding Manager
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Invoice Appearance Tab */}
       {activeTab === 'invoice-appearance' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Invoice Templates</CardTitle>
-              <p className="text-sm text-gray-600">Choose from pre-designed invoice templates</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <SettingsCard title="Invoice Templates" subtitle="Choose from pre-designed invoice templates">
+            <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
                   { value: 'default', label: 'Default', description: 'Clean and professional template' },
@@ -1009,15 +994,11 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Color Scheme</CardTitle>
-              <p className="text-sm text-gray-600">Choose a color scheme for your invoices</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SettingsCard title="Color Scheme" subtitle="Choose a color scheme for your invoices">
+            <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                   { value: 'blue', label: 'Blue', color: 'bg-blue-500' },
@@ -1039,17 +1020,13 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Email Settings</CardTitle>
-              <p className="text-sm text-gray-600">Configure default email behavior</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
+          <SettingsCard title="Email Settings" subtitle="Configure default email behavior">
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                <div className="flex-1 min-w-0">
                   <h4 className="font-medium">Always CC Myself</h4>
                   <p className="text-sm text-gray-600">Automatically CC yourself on all invoice emails</p>
                 </div>
@@ -1060,19 +1037,16 @@ export default function SettingsPage() {
                     ...prev,
                     alwaysCcSelf: !prev.alwaysCcSelf
                   }))}
+                  className="flex-shrink-0 w-full sm:w-auto"
                 >
                   {invoiceAppearanceData.alwaysCcSelf ? 'Enabled' : 'Disabled'}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Default Payment Instructions</CardTitle>
-              <p className="text-sm text-gray-600">Set default payment instructions for all new invoices</p>
-            </CardHeader>
-            <CardContent>
+          <SettingsCard title="Default Payment Instructions" subtitle="Set default payment instructions for all new invoices">
+            <div>
               <Textarea
                 value={invoiceAppearanceData.defaultPaymentInstructions}
                 onChange={(e) => setInvoiceAppearanceData(prev => ({ 
@@ -1082,14 +1056,13 @@ export default function SettingsPage() {
                 placeholder="Enter default payment instructions (e.g., bank account details, payment terms)"
                 rows={4}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
 
           <div className="flex justify-end">
-            <Button onClick={handleInvoiceAppearanceSave} disabled={loading}>
-              <Save className="w-4 h-4 mr-2" />
-              {loading ? 'Saving...' : 'Save Invoice Appearance'}
-            </Button>
+            <SaveButton onClick={handleInvoiceAppearanceSave} disabled={loading} loading={loading}>
+              Save Invoice Appearance
+            </SaveButton>
           </div>
         </div>
       )}
@@ -1097,12 +1070,8 @@ export default function SettingsPage() {
       {/* Tax & Currency Tab */}
       {activeTab === 'tax-currency' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tax & Currency Settings</CardTitle>
-              <p className="text-sm text-gray-600">Manage your business location, currency, and tax rates</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <SettingsCard title="Tax & Currency Settings" subtitle="Manage your business location, currency, and tax rates">
+            <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="taxCountry">Country</Label>
@@ -1158,13 +1127,12 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleTaxCurrencySave} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Tax & Currency Settings'}
-                </Button>
+                <SaveButton onClick={handleTaxCurrencySave} disabled={loading} loading={loading}>
+                  Save Tax & Currency Settings
+                </SaveButton>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
 
           {/* Currency Change Prompt */}
           {showCurrencyPrompt && (
@@ -1213,12 +1181,8 @@ export default function SettingsPage() {
             showPreview={true}
           />
           
-          <Card>
-            <CardHeader>
-              <CardTitle>Color Scheme</CardTitle>
-              <p className="text-sm text-gray-600">Choose your preferred color scheme</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SettingsCard title="Color Scheme" subtitle="Choose your preferred color scheme">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
                   { value: 'light', label: 'Light', description: 'Light backgrounds with dark text' },
@@ -1241,25 +1205,20 @@ export default function SettingsPage() {
               </div>
               
               <div className="flex justify-end pt-4 border-t">
-                <Button onClick={handleThemeSave} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Theme Preferences'}
-                </Button>
+                <SaveButton onClick={handleThemeSave} disabled={loading} loading={loading}>
+                  Save Theme Preferences
+                </SaveButton>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <p className="text-sm text-gray-600">Choose which notifications you'd like to receive</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SettingsCard title="Notification Preferences" subtitle="Choose which notifications you'd like to receive">
+            <div className="space-y-4">
               <div className="space-y-4">
                 {[
                   { key: 'emailNotifications', label: 'Email Notifications', description: 'Receive email notifications for important updates' },
@@ -1267,12 +1226,12 @@ export default function SettingsPage() {
                   { key: 'paymentNotifications', label: 'Payment Notifications', description: 'Receive alerts when payments are received' },
                   { key: 'invoiceUpdates', label: 'Invoice Updates', description: 'Get notified about invoice status changes' }
                 ].map((setting) => (
-                  <div key={setting.key} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
+                  <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                    <div className="flex-1 min-w-0">
                       <h4 className="font-medium">{setting.label}</h4>
                       <p className="text-sm text-gray-600">{setting.description}</p>
                     </div>
-                    <div>
+                    <div className="flex-shrink-0">
                       <Button
                         variant={notificationSettings[setting.key as keyof typeof notificationSettings] ? "default" : "outline"}
                         size="sm"
@@ -1280,6 +1239,7 @@ export default function SettingsPage() {
                           ...prev,
                           [setting.key]: !prev[setting.key as keyof typeof prev]
                         }))}
+                        className="w-full sm:w-auto"
                       >
                         {notificationSettings[setting.key as keyof typeof notificationSettings] ? 'Enabled' : 'Disabled'}
                       </Button>
@@ -1289,25 +1249,20 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleNotificationSave} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Notification Settings'}
-                </Button>
+                <SaveButton onClick={handleNotificationSave} disabled={loading} loading={loading}>
+                  Save Notification Settings
+                </SaveButton>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Chatbot History Tab */}
       {activeTab === 'chatbot' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Chatbot Interaction History</CardTitle>
-              <p className="text-sm text-gray-600">View your complete conversation history with the AI assistant</p>
-            </CardHeader>
-            <CardContent>
+          <SettingsCard title="Chatbot Interaction History" subtitle="View your complete conversation history with the AI assistant">
+            <div>
               {loadingInteractions ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="text-center">
@@ -1382,20 +1337,16 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Cache Management Tab */}
       {activeTab === 'cache' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cache Management</CardTitle>
-              <p className="text-sm text-gray-600">Monitor and clear application cache to improve performance</p>
-            </CardHeader>
-            <CardContent>
+          <SettingsCard title="Cache Management" subtitle="Monitor and clear application cache to improve performance">
+            <div>
               {loadingCache ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="text-center">
@@ -1448,8 +1399,8 @@ export default function SettingsPage() {
                     <h3 className="text-lg font-medium">Cache Actions</h3>
                     
                     <div className="grid grid-cols-1 gap-4">
-                      <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                        <div className="flex-1 min-w-0">
                           <h4 className="font-medium">Clear All Cache</h4>
                           <p className="text-sm text-gray-600">Clear all cached data and reload the page. Recommended if you're experiencing display issues.</p>
                         </div>
@@ -1457,14 +1408,15 @@ export default function SettingsPage() {
                           onClick={handleClearAllCache}
                           disabled={loadingCache}
                           variant="destructive"
+                          className="flex-shrink-0 w-full sm:w-auto"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Clear All
                         </Button>
                       </div>
 
-                      <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                        <div className="flex-1 min-w-0">
                           <h4 className="font-medium">Clear Voice Cache</h4>
                           <p className="text-sm text-gray-600">Clear stored voice commands and speech recognition data.</p>
                         </div>
@@ -1472,14 +1424,15 @@ export default function SettingsPage() {
                           onClick={handleClearVoiceCache}
                           disabled={loadingCache || cacheStats.voiceCommands.total === 0}
                           variant="outline"
+                          className="flex-shrink-0 w-full sm:w-auto"
                         >
                           <MessageCircle className="w-4 h-4 mr-2" />
                           Clear Voice Cache
                         </Button>
                       </div>
 
-                      <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                        <div className="flex-1 min-w-0">
                           <h4 className="font-medium">Clear Local Storage</h4>
                           <p className="text-sm text-gray-600">Clear locally stored data (theme settings will be preserved).</p>
                         </div>
@@ -1487,6 +1440,7 @@ export default function SettingsPage() {
                           onClick={handleClearLocalStorage}
                           disabled={loadingCache || cacheStats.localStorage.keys.length === 0}
                           variant="outline"
+                          className="flex-shrink-0 w-full sm:w-auto"
                         >
                           <HardDrive className="w-4 h-4 mr-2" />
                           Clear Local Storage
@@ -1506,7 +1460,7 @@ export default function SettingsPage() {
                           <div>
                             <h4 className="font-medium mb-2">Local Storage Keys</h4>
                             <div className="bg-gray-50 rounded-lg p-3 max-h-32 overflow-y-auto">
-                              <code className="text-sm text-gray-700">
+                              <code className="text-sm text-gray-700 break-words whitespace-normal">
                                 {cacheStats.localStorage.keys.join(', ')}
                               </code>
                             </div>
@@ -1517,7 +1471,7 @@ export default function SettingsPage() {
                           <div>
                             <h4 className="font-medium mb-2">Session Storage Keys</h4>
                             <div className="bg-gray-50 rounded-lg p-3 max-h-32 overflow-y-auto">
-                              <code className="text-sm text-gray-700">
+                              <code className="text-sm text-gray-700 break-words whitespace-normal">
                                 {cacheStats.sessionStorage.keys.join(', ')}
                               </code>
                             </div>
@@ -1555,20 +1509,16 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Help & Support Tab */}
       {activeTab === 'help-support' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Help & Support</CardTitle>
-              <p className="text-sm text-gray-600">Get help and access your AI tutorial</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <SettingsCard title="Help & Support" subtitle="Get help and access your AI tutorial">
+            <div className="space-y-6">
               {/* My AI Tutorial Section */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium flex items-center space-x-2">
@@ -1576,9 +1526,9 @@ export default function SettingsPage() {
                   <span>My AI Tutorial</span>
                 </h3>
                 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-blue-900 mb-2">
                         {user?.workType ? `${user.workType.split('-').map(word => 
                           word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} Tutorial` : 'Business Tutorial'}
@@ -1588,7 +1538,7 @@ export default function SettingsPage() {
                         Learn to add customers, create invoices, track payments, and more.
                       </p>
                       
-                      <div className="flex items-center space-x-4">
+                      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                         <div className="flex items-center space-x-1 text-blue-600">
                           <Clock className="w-4 h-4" />
                           <span className="text-sm">5-6 minutes</span>
@@ -1613,7 +1563,7 @@ export default function SettingsPage() {
                     <Button 
                       onClick={handleStartTutorial}
                       disabled={loadingTutorial}
-                      className="flex-shrink-0"
+                      className="flex-shrink-0 w-full sm:w-auto"
                     >
                       <BookOpen className="w-4 h-4 mr-2" />
                       {tutorialCompleted ? 'Replay Tutorial' : 'Start Tutorial'}
@@ -1663,63 +1613,59 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
 
       {/* Security Tab */}
       {activeTab === 'security' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Security</CardTitle>
-              <p className="text-sm text-gray-600">Manage your account security and data</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <SettingsCard title="Account Security" subtitle="Manage your account security and data">
+            <div className="space-y-6">
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                  <div className="flex-1 min-w-0">
                     <h4 className="font-medium">Password</h4>
                     <p className="text-sm text-gray-600">Last changed: {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}</p>
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" className="flex-shrink-0 w-full sm:w-auto">
                     Change Password
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                  <div className="flex-1 min-w-0">
                     <h4 className="font-medium">Two-Factor Authentication</h4>
                     <p className="text-sm text-gray-600">Add an extra layer of security to your account</p>
                   </div>
-                  <Badge variant="outline">Coming Soon</Badge>
+                  <Badge variant="outline" className="flex-shrink-0 w-fit">Coming Soon</Badge>
                 </div>
 
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3">
+                  <div className="flex-1 min-w-0">
                     <h4 className="font-medium">Export Data</h4>
                     <p className="text-sm text-gray-600">Download all your account data</p>
                   </div>
-                  <Button variant="outline" onClick={exportData}>
+                  <Button variant="outline" onClick={exportData} className="flex-shrink-0 w-full sm:w-auto">
                     <Download className="w-4 h-4 mr-2" />
                     Export
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-4 border rounded-lg border-red-200">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg border-red-200 gap-3">
+                  <div className="flex-1 min-w-0">
                     <h4 className="font-medium text-red-600">Delete Account</h4>
                     <p className="text-sm text-gray-600">Permanently delete your account and all data</p>
                   </div>
-                  <Button variant="destructive">
+                  <Button variant="destructive" className="flex-shrink-0 w-full sm:w-auto">
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete Account
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SettingsCard>
         </div>
       )}
       
