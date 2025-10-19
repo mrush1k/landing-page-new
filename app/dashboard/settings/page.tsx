@@ -1115,7 +1115,7 @@ export default function SettingsPage() {
                     max="100"
                     step="0.01"
                     placeholder="0.00"
-                    value={taxCurrencyData.defaultTaxRate}
+                    value={taxCurrencyData.defaultTaxRate ?? ''}
                     onChange={(e) => setTaxCurrencyData(prev => ({ ...prev, defaultTaxRate: e.target.value }))}
                     className="w-32"
                   />
