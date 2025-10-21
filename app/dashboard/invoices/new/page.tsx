@@ -451,11 +451,47 @@ export default function NewInvoicePage() {
   }
 
   const previewPDF = () => {
-    // Implementation for PDF preview
-    toast({
-      title: "PDF Preview",
-      description: "PDF preview will open in a new window",
-    })
+    try {
+      // Dynamically import jsPDF and generator to avoid SSR issues
+      // @ts-ignore
+      const { generateInvoicePDF } = require('@/lib/pdf-generator');
+      // Build a minimal invoice object from current form state
+      const invoiceData = {
+        number: invoiceNumber || nextInvoiceNumber || 'Preview',
+        issueDate: invoiceDate ? invoiceDate.toISOString() : new Date().toISOString(),
+        dueDate: dueDate ? dueDate.toISOString() : new Date().toISOString(),
+        currency: currency || 'USD',
+        customer: customers.find(c => c.id === customerId) || {},
+        items: items.map(item => ({
+          name: item.name || '',
+          description: item.description || '',
+          quantity: item.quantity || 1,
+          unitPrice: item.unitPrice || 0
+        })),
+        notes,
+        poNumber,
+        status: 'DRAFT',
+        total: items.reduce((sum, item) => sum + ((item.quantity || 1) * (item.unitPrice || 0)), 0),
+        taxRate: taxRate || 0,
+        discountAmount: discountAmount || 0,
+        discountType: discountType || 'fixed',
+        payments: [],
+      };
+      // Use userProfile for appearance
+      const pdf = generateInvoicePDF(invoiceData, userProfile);
+      // Get PDF as Blob
+      const blob = pdf.output('blob');
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      // Optionally revoke after some time
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+    } catch (error) {
+      toast({
+        title: "PDF Preview Error",
+        description: "Could not generate PDF preview.",
+        variant: "destructive",
+      });
+    }
   }
 
   const handlePaymentTermsChange = (days: number) => {
