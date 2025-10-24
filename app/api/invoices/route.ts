@@ -36,15 +36,49 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([])
     }
 
+    // Optimized query with selective field fetching
     const invoices = await prisma.invoice.findMany({
       where: {
         userId: dbUser.id,
         deletedAt: null, // Only show non-deleted invoices
       },
-      include: {
-        customer: true,
-        items: true,
-        payments: true,
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        issueDate: true,
+        dueDate: true,
+        currency: true,
+        subtotal: true,
+        taxAmount: true,
+        total: true,
+        createdAt: true,
+        updatedAt: true,
+        customer: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            businessName: true,
+          },
+        },
+        items: {
+          select: {
+            id: true,
+            description: true,
+            quantity: true,
+            unitPrice: true,
+            total: true,
+          },
+        },
+        payments: {
+          select: {
+            id: true,
+            amount: true,
+            paymentDate: true,
+            paymentMethod: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })

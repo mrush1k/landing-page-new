@@ -55,6 +55,8 @@ model User {
   userTutorials         UserTutorial[]
   invoiceAudits         InvoiceAuditLog[]
 
+  @@index([email])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -81,6 +83,9 @@ model Customer {
   estimates         Estimate[]
   invoices          Invoice[]
 
+  @@index([userId])
+  @@index([email])
+  @@index([createdAt])
   @@map("customers")
 }
 
@@ -129,6 +134,13 @@ model Invoice {
   payments          Payment[]
   auditLogs         InvoiceAuditLog[]
 
+  @@index([userId])
+  @@index([customerId])
+  @@index([status])
+  @@index([issueDate])
+  @@index([dueDate])
+  @@index([createdAt])
+  @@index([number])
   @@map("invoices")
 }
 
@@ -143,6 +155,7 @@ model InvoiceItem {
   updatedAt   DateTime @updatedAt
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([invoiceId])
   @@map("invoice_items")
 }
 
@@ -169,6 +182,10 @@ model Estimate {
   customer             Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
   @@map("estimates")
 }
 
@@ -184,6 +201,7 @@ model EstimateItem {
   updatedAt   DateTime @updatedAt
   estimate    Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
 
+  @@index([estimateId])
   @@map("estimate_items")
 }
 
@@ -198,6 +216,8 @@ model Payment {
   updatedAt     DateTime      @updatedAt
   invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([invoiceId])
+  @@index([paymentDate])
   @@map("payments")
 }
 
@@ -212,6 +232,8 @@ model ChatbotInteraction {
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([timestamp])
   @@map("chatbot_interactions")
 }
 

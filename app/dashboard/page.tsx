@@ -1,51 +1,36 @@
 "use client"
 
-import { useEffect, useState } from 'react'
-import dynamic from 'next/dynamic'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-
-// Lazy-load UI and icon components to reduce initial JS bundle
-const Button = dynamic(() => import('@/components/ui/button').then(m => m.Button), { ssr: false })
-const Card = dynamic(() => import('@/components/ui/card').then(m => m.Card), { ssr: false })
-const CardContent = dynamic(() => import('@/components/ui/card').then(m => m.CardContent), { ssr: false })
-const CardHeader = dynamic(() => import('@/components/ui/card').then(m => m.CardHeader), { ssr: false })
-const CardTitle = dynamic(() => import('@/components/ui/card').then(m => m.CardTitle), { ssr: false })
-const Table = dynamic(() => import('@/components/ui/table').then(m => m.Table), { ssr: false })
-const TableBody = dynamic(() => import('@/components/ui/table').then(m => m.TableBody), { ssr: false })
-const TableCell = dynamic(() => import('@/components/ui/table').then(m => m.TableCell), { ssr: false })
-const TableHead = dynamic(() => import('@/components/ui/table').then(m => m.TableHead), { ssr: false })
-const TableHeader = dynamic(() => import('@/components/ui/table').then(m => m.TableHeader), { ssr: false })
-const TableRow = dynamic(() => import('@/components/ui/table').then(m => m.TableRow), { ssr: false })
-const Badge = dynamic(() => import('@/components/ui/badge').then(m => m.Badge), { ssr: false })
-
-const Plus = dynamic(() => import('lucide-react').then(m => m.Plus), { ssr: false })
-const AlertCircle = dynamic(() => import('lucide-react').then(m => m.AlertCircle), { ssr: false })
-const CheckCircle = dynamic(() => import('lucide-react').then(m => m.CheckCircle), { ssr: false })
-const FileText = dynamic(() => import('lucide-react').then(m => m.FileText), { ssr: false })
-const Users = dynamic(() => import('lucide-react').then(m => m.Users), { ssr: false })
-const DollarSign = dynamic(() => import('lucide-react').then(m => m.DollarSign), { ssr: false })
-const Calendar = dynamic(() => import('lucide-react').then(m => m.Calendar), { ssr: false })
-const Mic = dynamic(() => import('lucide-react').then(m => m.Mic), { ssr: false })
-const Mail = dynamic(() => import('lucide-react').then(m => m.Mail), { ssr: false })
-const Download = dynamic(() => import('lucide-react').then(m => m.Download), { ssr: false })
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { 
+  Plus, 
+  AlertCircle, 
+  CheckCircle, 
+  FileText, 
+  Users, 
+  DollarSign, 
+  Calendar, 
+  Mic, 
+  Mail, 
+  Download 
+} from 'lucide-react'
 import { format, isPast, parseISO } from 'date-fns'
 import { formatCurrency as formatCurrencyUtil } from '@/lib/utils'
 import { OnboardingFlow } from '@/components/onboarding-flow'
 import { useAuth } from '@/lib/auth-context'
 import { Invoice, InvoiceStatus } from '@/lib/types'
+import { DashboardSkeleton } from '@/components/loading-skeleton'
 
 export default function DashboardPage() {
   const { user, userProfile, getAuthHeaders } = useAuth()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (user) {
-      fetchInvoices()
-    }
-  }, [user])
-
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     try {
       const headers = await getAuthHeaders()
       const response = await fetch('/api/invoices', { headers })
@@ -71,29 +56,42 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [getAuthHeaders])
 
-  const overdueInvoices = invoices.filter(invoice => {
-    // Skip invoices with invalid status
-    if (!invoice.status) {
-      console.warn('Invoice with missing status:', invoice.id)
-      return false
+  useEffect(() => {
+    if (user) {
+      fetchInvoices()
     }
-    
-    const isOverdue = isPast(parseISO(invoice.dueDate.toString())) && 
-                     ![InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.CANCELLED].includes(invoice.status)
-    return isOverdue || invoice.status === InvoiceStatus.OVERDUE
-  }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+  }, [user, fetchInvoices])
 
-  const paidInvoices = invoices.filter(invoice => 
-    invoice.status && [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID].includes(invoice.status)
-  ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  // Memoize expensive calculations
+  const overdueInvoices = useMemo(() => {
+    return invoices.filter(invoice => {
+      // Skip invoices with invalid status
+      if (!invoice.status) {
+        console.warn('Invoice with missing status:', invoice.id)
+        return false
+      }
+      
+      const isOverdue = isPast(parseISO(invoice.dueDate.toString())) && 
+                       ![InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.CANCELLED].includes(invoice.status)
+      return isOverdue || invoice.status === InvoiceStatus.OVERDUE
+    }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+  }, [invoices])
 
-  const totalOutstanding = overdueInvoices.reduce((sum, invoice) => sum + invoice.total, 0)
-  const totalPaid = paidInvoices.reduce((sum, invoice) => sum + invoice.total, 0)
-  const totalCustomers = new Set(invoices.map(invoice => invoice.customerId)).size
+  const paidInvoices = useMemo(() => {
+    return invoices.filter(invoice => 
+      invoice.status && [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID].includes(invoice.status)
+    ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }, [invoices])
 
-  const getStatusBadge = (status: InvoiceStatus) => {
+  const dashboardStats = useMemo(() => ({
+    totalOutstanding: overdueInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+    totalPaid: paidInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
+    totalCustomers: new Set(invoices.map(invoice => invoice.customerId)).size
+  }), [overdueInvoices, paidInvoices, invoices])
+
+  const getStatusBadge = useCallback((status: InvoiceStatus) => {
     const statusConfig = {
       [InvoiceStatus.DRAFT]: { label: 'Draft', variant: 'secondary' as const },
       [InvoiceStatus.SENT]: { label: 'Sent', variant: 'default' as const },
@@ -113,26 +111,21 @@ export default function DashboardPage() {
     }
     
     return <Badge variant={config.variant} className="text-xs">{config.label}</Badge>
-  }
+  }, [])
 
-  const formatCurrency = (amount: number, currency?: string) => {
+  const formatCurrency = useCallback((amount: number, currency?: string) => {
     return formatCurrencyUtil(amount, currency || userProfile?.currency || 'USD')
-  }
+  }, [userProfile?.currency])
 
   if (loading) {
     return (
       <div className="container-mobile">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 sm:h-8 bg-gray-200 rounded w-1/2 sm:w-1/4"></div>
-          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-24 sm:h-32 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
+        <DashboardSkeleton />
       </div>
     )
   }
+
+  const { totalOutstanding, totalPaid, totalCustomers } = dashboardStats
 
   return (
     <div className="container-mobile space-y-4 sm:space-y-6">

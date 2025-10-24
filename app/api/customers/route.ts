@@ -25,8 +25,25 @@ export async function GET() {
       return NextResponse.json([])
     }
 
+    // Optimized query - only fetch needed fields
     const customers = await prisma.customer.findMany({
       where: { userId: dbUser.id },
+      select: {
+        id: true,
+        displayName: true,
+        firstName: true,
+        lastName: true,
+        businessName: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        country: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: { createdAt: 'desc' },
     })
 
