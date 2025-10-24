@@ -4,6 +4,12 @@
 
 ### 1. Generate Prisma Migration
 ```bash
+
+
+
+
+
+
 npx prisma generate
 npx prisma migrate dev --name add_performance_indexes
 ```

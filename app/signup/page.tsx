@@ -3,17 +3,12 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth-context'
 import { COUNTRIES } from '@/lib/types'
 import { detectUserCountry, getSettingsForCountry } from '@/lib/country-utils'
-import { Eye, EyeOff, Building, Upload } from 'lucide-react'
+import { Eye, EyeOff, Building, Zap, Shield, BarChart, CheckCircle, Users, DollarSign } from 'lucide-react'
 import { SocialLoginButtons } from '@/components/social-login-buttons'
-import { Separator } from '@/components/ui/separator'
+import DynamicBackground from '@/components/landing/DynamicBackground'
 import { useWorkflowDiagnostics, useFormDiagnostics } from '@/components/diagnostic-provider'
 
 const WORK_TYPE_OPTIONS = [
@@ -185,291 +180,370 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-3xl font-bold text-center">Set up your account</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Social Login Options */}
-          <div className="space-y-4 mb-6">
-            <SocialLoginButtons 
-              isSignUp={true}
-              disabled={loading}
-            />
+    <div className="auth-page">
+      {/* Professional Background */}
+      <DynamicBackground />
+
+      {/* Main content */}
+      <div className="auth-container">
+        <div className="auth-grid">
+          
+          {/* Left side - Branding and features */}
+          <div className="auth-branding">
+            {/* Logo and heading */}
+            <div className="brand-logo">
+              <div className="brand-icon">
+                IE
+              </div>
+              <span className="brand-name">Invoice Easy</span>
+            </div>
+
+            <h1 className="brand-heading">
+              <span className="gradient-text-primary">
+                Start Your
+              </span>
+              <br />
+              <span className="gradient-text-secondary">
+                Invoicing Journey
+              </span>
+            </h1>
             
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
+            <p className="brand-description">
+              Join thousands of professionals who trust Invoice Easy for their business invoicing needs. 
+              Get started in minutes with our AI-powered platform.
+            </p>
+
+            {/* Feature highlights */}
+            <div className="signup-features">
+              <div className="feature-highlight">
+                <div className="feature-highlight-icon">
+                  <Zap size={20} />
+                </div>
+                <h3 className="feature-highlight-title">Quick Setup</h3>
+                <p className="feature-highlight-description">
+                  Get your invoicing system ready in under 5 minutes
+                </p>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with email</span>
+
+              <div className="feature-highlight">
+                <div className="feature-highlight-icon">
+                  <Shield size={20} />
+                </div>
+                <h3 className="feature-highlight-title">Secure & Reliable</h3>
+                <p className="feature-highlight-description">
+                  Bank-grade security with 99.9% uptime guarantee
+                </p>
+              </div>
+
+              <div className="feature-highlight">
+                <div className="feature-highlight-icon">
+                  <BarChart size={20} />
+                </div>
+                <h3 className="feature-highlight-title">Smart Analytics</h3>
+                <p className="feature-highlight-description">
+                  Track payments and business insights automatically
+                </p>
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email and Password Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-600 uppercase tracking-wide">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                  placeholder="Enter your email"
-                  className="text-lg"
-                />
+          {/* Right side - Signup form */}
+          <div className="auth-card">
+            <div className="auth-card-content">
+              {/* Header */}
+              <div className="auth-header">
+                <h2 className="auth-title">Create Account</h2>
+                <p className="auth-subtitle">Set up your professional invoicing account</p>
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="username" className="text-sm font-medium text-gray-600 uppercase tracking-wide">Username</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  required
-                  placeholder="Choose a username"
-                  className="text-lg"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-600 uppercase tracking-wide">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                    placeholder="Enter your password"
-                    className="text-lg pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
+              {/* Social Login */}
+              <div>
+                <SocialLoginButtons 
+                  isSignUp={true}
+                  disabled={loading}
+                />
+                
+                <div className="social-separator">
+                  <span className="social-separator-text">Or continue with email</span>
                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-600 uppercase tracking-wide">Confirm Password</Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    required
-                    placeholder="Confirm your password"
-                    className="text-lg pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-            </div>
 
-            {/* Company Logo Section */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600 uppercase tracking-wide">Company Logo (Optional)</Label>
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                  {logoFile ? (
-                    <img 
-                      src={URL.createObjectURL(logoFile)} 
-                      alt="Logo preview" 
-                      className="w-full h-full object-cover rounded-lg"
+              {/* Signup form */}
+              <form onSubmit={handleSubmit} className="auth-form">
+                {/* Email and Username */}
+                <div className="signup-grid">
+                  <div className="form-group">
+                    <label htmlFor="email" className="form-label">Email Address</label>
+                    <input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      required
+                      placeholder="Enter your email"
+                      className="form-input"
                     />
-                  ) : (
-                    <Building className="w-8 h-8 text-gray-400" />
-                  )}
+                  </div>
+                  
+                  <div className="form-group">
+                    <label htmlFor="username" className="form-label">Username</label>
+                    <input
+                      id="username"
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      required
+                      placeholder="Choose a username"
+                      className="form-input"
+                    />
+                  </div>
                 </div>
-                <div>
+
+                {/* Password fields */}
+                <div className="signup-grid">
+                  <div className="form-group">
+                    <label htmlFor="password" className="form-label">Password</label>
+                    <div className="password-container">
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        required
+                        placeholder="Enter your password"
+                        className="form-input password-input"
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label htmlFor="confirmPassword" className="form-label">Confirm Password</label>
+                    <div className="password-container">
+                      <input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={formData.confirmPassword}
+                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        required
+                        placeholder="Confirm your password"
+                        className="form-input password-input"
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Company Logo */}
+                <div className="signup-section">
+                  <label className="section-title">Company Logo (Optional)</label>
+                  <div className="logo-upload-container">
+                    <div className="logo-preview">
+                      {logoFile ? (
+                        <img 
+                          src={URL.createObjectURL(logoFile)} 
+                          alt="Logo preview"
+                        />
+                      ) : (
+                        <Building />
+                      )}
+                    </div>
+                    <div>
+                      <input
+                        type="file"
+                        id="logo"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="file-input"
+                      />
+                      <label htmlFor="logo" className="file-label">
+                        Upload Logo
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Company Name */}
+                <div className="form-group">
+                  <label htmlFor="companyName" className="form-label">Company Name</label>
                   <input
-                    type="file"
-                    id="logo"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    className="hidden"
+                    id="companyName"
+                    type="text"
+                    value={formData.companyName}
+                    onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                    placeholder="e.g., Jane's Plumbing"
+                    className="form-input"
                   />
-                  <Label htmlFor="logo" className="cursor-pointer">
-                    <span className="text-blue-600 hover:text-blue-500 font-medium">Upload Logo</span>
-                  </Label>
+                </div>
+
+                {/* Country */}
+                <div className="form-group">
+                  <label htmlFor="country" className="form-label">Country of Business</label>
+                  <select 
+                    value={formData.country} 
+                    onChange={(e) => handleCountryChange(e.target.value)} 
+                    required
+                    className="form-select"
+                  >
+                    <option value="">Select your country</option>
+                    {COUNTRIES.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Business Registration Number */}
+                {formData.country && (
+                  <div className="form-group">
+                    <label htmlFor="businessRegNumber" className="form-label">
+                      {getBusinessRegLabel()}
+                    </label>
+                    <input
+                      id="businessRegNumber"
+                      type="text"
+                      value={formData.businessRegNumber}
+                      onChange={(e) => setFormData({ ...formData, businessRegNumber: e.target.value })}
+                      placeholder={formData.country === 'AU' ? '11 digit ABN' : 'Business registration number'}
+                      className="form-input"
+                    />
+                  </div>
+                )}
+
+                {/* Business Address */}
+                <div className="signup-section">
+                  <label className="section-title">Business Address (Optional)</label>
+                  <div className="address-grid">
+                    <input
+                      placeholder="Street Address"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      className="form-input"
+                    />
+                    
+                    <input
+                      placeholder="Suburb"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="form-input"
+                    />
+                    
+                    <div className="address-grid-row">
+                      <input
+                        placeholder="State"
+                        value={formData.state}
+                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        className="form-input"
+                      />
+                      <input
+                        placeholder="Postcode"
+                        value={formData.postalCode}
+                        onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Work Type */}
+                <div className="form-group">
+                  <label className="form-label">Tell Us What You Do</label>
+                  <select 
+                    value={formData.workType} 
+                    onChange={(e) => setFormData({ ...formData, workType: e.target.value })} 
+                    required
+                    className="form-select"
+                  >
+                    <option value="">Select your line of work...</option>
+                    {WORK_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {formData.workType === 'other' && (
+                  <div className="form-group">
+                    <input
+                      type="text"
+                      value={formData.customWorkType}
+                      onChange={(e) => setFormData({ ...formData, customWorkType: e.target.value })}
+                      required
+                      placeholder="Enter your work type"
+                      className="form-input"
+                    />
+                  </div>
+                )}
+
+                {/* Date Format */}
+                <div className="form-group">
+                  <label className="form-label">Date Format</label>
+                  <select 
+                    value={formData.dateFormat} 
+                    onChange={(e) => setFormData({ ...formData, dateFormat: e.target.value })}
+                    className="form-select"
+                  >
+                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                  </select>
+                </div>
+
+                {error && (
+                  <div className="error-message">
+                    {error}
+                  </div>
+                )}
+
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="btn-primary"
+                >
+                  {loading ? (
+                    <>
+                      <div className="loading-spinner" />
+                      Setting up...
+                    </>
+                  ) : (
+                    <>
+                      Create Account
+                      <CheckCircle size={16} />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Footer links */}
+              <div className="auth-footer">
+                <div className="auth-footer-text">
+                  Already have an account?{' '}
+                  <Link 
+                    href="/login" 
+                    className="auth-link"
+                  >
+                    Sign in
+                  </Link>
                 </div>
               </div>
             </div>
-
-            {/* Company Name */}
-            <div className="space-y-2">
-              <Label htmlFor="companyName" className="text-sm font-medium text-gray-600 uppercase tracking-wide">Company Name</Label>
-              <Input
-                id="companyName"
-                type="text"
-                value={formData.companyName}
-                onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                placeholder="e.g., Jane's Plumbing"
-                className="text-lg"
-              />
-            </div>
-
-            {/* Country */}
-            <div className="space-y-2">
-              <Label htmlFor="country" className="text-sm font-medium text-gray-600 uppercase tracking-wide">Country of Business</Label>
-              <Select value={formData.country} onValueChange={handleCountryChange} required>
-                <SelectTrigger className="text-lg">
-                  <SelectValue placeholder="Select your country" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COUNTRIES.map((country) => (
-                    <SelectItem key={country.code} value={country.code}>
-                      {country.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Business Registration Number */}
-            {formData.country && (
-              <div className="space-y-2">
-                <Label htmlFor="businessRegNumber" className="text-sm font-medium text-gray-600 uppercase tracking-wide">
-                  {getBusinessRegLabel()}
-                </Label>
-                <Input
-                  id="businessRegNumber"
-                  type="text"
-                  value={formData.businessRegNumber}
-                  onChange={(e) => setFormData({ ...formData, businessRegNumber: e.target.value })}
-                  placeholder={formData.country === 'AU' ? '11 digit ABN' : 'Business registration number'}
-                  className="text-lg"
-                />
-              </div>
-            )}
-
-            {/* Business Address Section */}
-            <div className="space-y-4">
-              <Label className="text-sm font-medium text-gray-600 uppercase tracking-wide">Business Address (Optional)</Label>
-              
-              <div className="space-y-3">
-                <Input
-                  placeholder="Street Address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="text-lg"
-                />
-                
-                <Input
-                  placeholder="Suburb"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="text-lg"
-                />
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    placeholder="State"
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    className="text-lg"
-                  />
-                  <Input
-                    placeholder="Postcode"
-                    value={formData.postalCode}
-                    onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                    className="text-lg"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Work Type */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600 uppercase tracking-wide">Tell Us What You Do</Label>
-              <Select value={formData.workType} onValueChange={(value) => setFormData({ ...formData, workType: value })} required>
-                <SelectTrigger className="text-lg">
-                  <SelectValue placeholder="Select your line of work..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {WORK_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.workType === 'other' && (
-              <div className="space-y-2">
-                <Input
-                  type="text"
-                  value={formData.customWorkType}
-                  onChange={(e) => setFormData({ ...formData, customWorkType: e.target.value })}
-                  required
-                  placeholder="Enter your work type"
-                  className="text-lg"
-                />
-              </div>
-            )}
-
-            {/* Date Format */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-600 uppercase tracking-wide">Date Format</Label>
-              <Select value={formData.dateFormat} onValueChange={(value) => setFormData({ ...formData, dateFormat: value })}>
-                <SelectTrigger className="text-lg">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                  <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                  <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {error && (
-              <div className="text-red-600 text-sm text-center">{error}</div>
-            )}
-
-            {/* Next Button */}
-            <div className="pt-4">
-              <Button 
-                type="submit" 
-                className="w-full bg-gray-400 hover:bg-gray-500 text-white py-3 text-lg font-medium rounded-lg"
-                disabled={loading}
-              >
-                {loading ? 'Setting up...' : 'Next'}
-              </Button>
-            </div>
-          </form>
-
-          <div className="mt-6 text-center text-sm">
-            <span className="text-gray-600">Already have an account? </span>
-            <Link href="/login" className="text-blue-600 hover:text-blue-500 font-medium">
-              Log In
-            </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }
