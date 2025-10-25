@@ -67,6 +67,13 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
   }, [messages])
 
   useEffect(() => {
+    // Load chat history when user profile is available
+    if (userProfile?.id) {
+      loadChatHistory()
+    }
+  }, [userProfile?.id])
+
+  useEffect(() => {
   // Check for reminders when component mounts
     checkForReminders()
     
@@ -75,6 +82,54 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
     
     return () => clearInterval(reminderInterval)
   }, [userProfile?.id])
+
+  const loadChatHistory = async () => {
+    if (!userProfile?.id) return
+    
+    try {
+      const response = await fetch(`/api/chatbot/log?userId=${userProfile.id}&limit=50`)
+      if (response.ok) {
+        const data = await response.json()
+        
+        if (data.interactions && data.interactions.length > 0) {
+          // Convert database records to ChatMessage format
+          // Interactions are ordered DESC (newest first), so reverse them
+          const historyMessages: ChatMessage[] = data.interactions
+            .reverse()
+            .flatMap((interaction: any) => {
+              const messages: ChatMessage[] = []
+              
+              // Add user message
+              messages.push({
+                id: `${interaction.id}-user`,
+                type: 'user',
+                content: interaction.userMessage,
+                timestamp: new Date(interaction.timestamp),
+              })
+              
+              // Add bot response
+              messages.push({
+                id: `${interaction.id}-bot`,
+                type: 'bot',
+                content: interaction.botResponse,
+                timestamp: new Date(interaction.timestamp),
+                action: interaction.action ? JSON.parse(interaction.action) : undefined,
+              })
+              
+              return messages
+            })
+          
+          // Prepend history to existing welcome message
+          setMessages(prev => {
+            const welcomeMessage = prev[0] // Keep the welcome message
+            return [welcomeMessage, ...historyMessages]
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error)
+    }
+  }
 
   const checkForReminders = async () => {
     if (!userProfile?.id) return
@@ -132,14 +187,31 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
     setIsProcessing(true)
     
     try {
-      // Call AI processing API
+      // Add user message to UI immediately
+      addMessage('user', userInput)
+      
+      // Prepare conversation history for AI (exclude system messages)
+      const conversationHistory = messages
+        .filter(m => m.type !== 'system')
+        .map(m => ({
+          role: m.type, // 'user' or 'bot'
+          content: m.content
+        }))
+      
+      // Add current user message to history
+      conversationHistory.push({
+        role: 'user',
+        content: userInput
+      })
+      
+      // Call AI processing API with full conversation history
       const response = await fetch('/api/chatbot/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          message: userInput,
+          messages: conversationHistory,
           userId: userProfile?.id 
         }),
       })
@@ -326,7 +398,13 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
       <div className="fixed bottom-4 right-4 z-50">
         <div className="relative">
           <Button
-            onClick={() => setIsOpen(true)}
+            onClick={() => {
+              setIsOpen(true)
+              // Reload chat history when opening the chat
+              if (userProfile?.id) {
+                loadChatHistory()
+              }
+            }}
             className="rounded-full w-12 h-12 bg-blue-600 hover:bg-blue-700 shadow-lg"
             size="sm"
           >

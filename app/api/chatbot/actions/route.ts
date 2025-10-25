@@ -214,53 +214,120 @@ async function createInvoice(data: any, userId: string) {
 }
 
 async function addCustomer(data: any, userId: string) {
-  const { customerName } = data
+  const { 
+    customerName,
+    email,
+    phone,
+    businessName,
+    address,
+    city,
+    state,
+    zipCode,
+    country,
+    businessRegNumber,
+    notes
+  } = data
   
   try {
-    // Get user's country for defaults
+    // Get user's country and currency for defaults
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { country: true }
+      select: { country: true, currency: true }
     })
     
     // Check if customer already exists
     const existingCustomer = await prisma.customer.findFirst({
       where: {
         userId,
-        displayName: {
-          contains: customerName,
-          mode: 'insensitive'
-        }
+        OR: [
+          {
+            displayName: {
+              equals: customerName,
+              mode: 'insensitive' as const
+            }
+          },
+          ...(email ? [{
+            email: {
+              equals: email,
+              mode: 'insensitive' as const
+            }
+          }] : [])
+        ]
       }
     })
     
     if (existingCustomer) {
       return {
         success: false,
-        message: `Customer "${customerName}" already exists in your database.`
+        message: `Customer "${customerName}" already exists in your database${existingCustomer.email ? ` with email ${existingCustomer.email}` : ''}.`
       }
     }
     
-    // Create new customer with intelligent defaults
+    // Parse name into firstName and lastName
+    const nameParts = customerName.trim().split(' ')
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.slice(1).join(' ') || ''
+    
+    // Build customer data object
+    const customerData: any = {
+      userId,
+      displayName: customerName,
+      firstName,
+      lastName,
+      email: email || '',
+      phone: phone || null,
+      businessName: businessName || null,
+      address: address || null,
+      city: city || null,
+      state: state || null,
+      zipCode: zipCode || null,
+      country: country || user?.country || '',
+      businessRegNumber: businessRegNumber || null,
+      notes: notes || (email || phone ? null : 'Added via AI Assistant - Some details may be pending')
+    }
+    
+    // Create new customer with all provided details
     const customer = await prisma.customer.create({
-      data: {
-        userId,
-        displayName: customerName,
-        firstName: customerName.split(' ')[0] || '',
-        lastName: customerName.split(' ').slice(1).join(' ') || '',
-        email: '', // Blank as specified
-        country: user?.country || '', // Use user's country as default
-        notes: 'Added via Voice AI - Pending complete details'
-      }
+      data: customerData
     })
+    
+    // Build success message with details
+    let message = `✅ Customer "${customerName}" added successfully`
+    const addedDetails: string[] = []
+    
+    if (email) addedDetails.push(`email: ${email}`)
+    if (phone) addedDetails.push(`phone: ${phone}`)
+    if (businessName) addedDetails.push(`business: ${businessName}`)
+    if (address) addedDetails.push('address')
+    if (country) addedDetails.push(`country: ${country}`)
+    if (businessRegNumber) addedDetails.push(`reg #: ${businessRegNumber}`)
+    
+    if (addedDetails.length > 0) {
+      message += ` with ${addedDetails.join(', ')}`
+    }
+    
+    message += '.'
+    
+    // Add reminder if important fields are missing
+    const missingFields: string[] = []
+    if (!email) missingFields.push('email')
+    if (!phone) missingFields.push('phone')
+    if (!address) missingFields.push('address')
+    
+    if (missingFields.length > 0) {
+      message += ` You can add ${missingFields.join(', ')} details later from the Customers page.`
+    }
     
     return {
       success: true,
-      message: `Customer "${customerName}" added successfully with default settings. You can update their details later.`,
+      message,
       data: {
         customerId: customer.id,
         customerName,
-        pendingDetails: true
+        email: email || null,
+        phone: phone || null,
+        country: country || user?.country,
+        hasCompleteDetails: !!(email && phone && address)
       }
     }
     
