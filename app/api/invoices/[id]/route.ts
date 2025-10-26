@@ -141,7 +141,7 @@ export async function DELETE(
   try {
     const { id } = await params
     
-    // Get user from Supabase auth using server client
+    // Fast auth check - JWT validation only (no network call)
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
 
@@ -161,9 +161,9 @@ export async function DELETE(
       select: {
         id: true,
         status: true,
-        payments: {
-          select: { id: true },
-        },
+        _count: {
+          select: { payments: true } // Just count, don't load payments
+        }
       },
     })
 
@@ -186,7 +186,7 @@ export async function DELETE(
     }
 
     // Warning if invoice has payments (even for VOIDED invoices)
-    const hasPayments = invoice.payments && invoice.payments.length > 0
+    const hasPayments = invoice._count.payments > 0
     if (hasPayments && !requestData.confirmWithPayments) {
       return NextResponse.json({ 
         error: 'This invoice has payment records. Deleting will hide the invoice but preserve payment history for audit purposes.',
@@ -195,7 +195,7 @@ export async function DELETE(
     }
 
     // Optimized: Parallel transaction operations
-    const result = await prisma.$transaction([
+    await prisma.$transaction([
       // Soft delete the invoice
       prisma.invoice.update({
         where: { id },
@@ -205,7 +205,6 @@ export async function DELETE(
           deleteReason: requestData.reason || null,
           updatedAt: new Date(),
         },
-        select: { id: true }, // Only return minimal data
       }),
       // Create audit log entry
       prisma.invoiceAuditLog.create({
@@ -217,7 +216,6 @@ export async function DELETE(
           oldStatus: invoice.status,
           newStatus: 'DELETED',
         },
-        select: { id: true }, // Only return minimal data
       }),
     ])
 

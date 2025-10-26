@@ -57,24 +57,8 @@ export default function InvoicesPage() {
     }
   }, [user])
 
-  // Polling for updates every 60 seconds (reduced from 15s for better performance)
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null
-    let activityTimeout: NodeJS.Timeout | null = null
-    if (user && isRealTimeActive) {
-      intervalId = setInterval(() => {
-        setTrackingActivity('Checking for updates...')
-        fetchInvoices(true)
-        activityTimeout = setTimeout(() => {
-          setTrackingActivity('')
-        }, 2000)
-      }, 60000)
-    }
-    return () => {
-      if (intervalId) clearInterval(intervalId)
-      if (activityTimeout) clearTimeout(activityTimeout)
-    }
-  }, [user, isRealTimeActive])
+  // No polling - operations are instant with optimistic updates
+  // Real-time updates happen through user actions, not polling
 
   const fetchInvoices = useCallback(async (silent: boolean = false) => {
     try {
@@ -82,35 +66,22 @@ export default function InvoicesPage() {
       const headers = await getAuthHeaders()
       const response = await fetch('/api/invoices', {
         headers,
-        cache: 'no-cache'
+        cache: 'no-store', // Force fresh data, no caching
+        next: { revalidate: 0 }
       })
       if (response.ok) {
         const data = await response.json()
-        setErrorCount(0)
-        setInvoices(prev => {
-          const hasChanges = JSON.stringify(prev) !== JSON.stringify(data)
-          if (hasChanges && silent) {
-            setLastUpdate(new Date())
-            setTrackingActivity('Changes detected!')
-            setTimeout(() => setTrackingActivity(''), 3000)
-          }
-          return data
-        })
+        setInvoices(data)
+        setLastUpdate(new Date())
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
     } catch (error) {
       console.error('Error fetching invoices:', error)
-      setErrorCount(prev => prev + 1)
-      if (errorCount >= 3 && silent) {
-        setIsRealTimeActive(false)
-        setTrackingActivity('Tracking paused due to errors')
-        setTimeout(() => setTrackingActivity(''), 5000)
-      }
     } finally {
-      if (!silent) setLoading(false)
+      setLoading(false)
     }
-  }, [getAuthHeaders, errorCount])
+  }, [getAuthHeaders])
 
   const getInvoiceStatus = (invoice: Invoice) => {
     if (invoice.status === InvoiceStatus.PAID || invoice.status === InvoiceStatus.PARTIALLY_PAID) {
@@ -225,7 +196,15 @@ export default function InvoicesPage() {
   // Handle actual invoice deletion
   const handleDeleteInvoice = async () => {
     if (!invoiceToDelete) return
+    
     try {
+      // OPTIMISTIC UPDATE: Remove from UI immediately
+      const deletedInvoice = invoices.find(inv => inv.id === invoiceToDelete)
+      setInvoices(prevInvoices => prevInvoices.filter(inv => inv.id !== invoiceToDelete))
+      setDeleteDialogOpen(false)
+      setTrackingActivity('Deleting invoice...')
+      
+      // Then sync with server in background
       const headers = await getAuthHeaders()
       const response = await fetch(`/api/invoices/${invoiceToDelete}`, {
         method: 'DELETE',
@@ -237,25 +216,42 @@ export default function InvoicesPage() {
           confirmWithPayments: deleteConfirmWithPayments
         })
       })
+      
       const data = await response.json()
+      
       if (response.ok) {
-        setInvoices(prevInvoices => prevInvoices.filter(inv => inv.id !== invoiceToDelete))
-        setTrackingActivity('Invoice deleted successfully')
-        setTimeout(() => setTrackingActivity(''), 3000)
-        setDeleteDialogOpen(false)
+        setTrackingActivity('Invoice deleted ✓')
+        setTimeout(() => setTrackingActivity(''), 2000)
       } else if (response.status === 400 && data.requiresConfirmation) {
+        // Restore invoice if confirmation needed
+        if (deletedInvoice) {
+          setInvoices(prev => [...prev, deletedInvoice].sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          ))
+        }
         setDeleteError(data.error)
         setDeleteConfirmWithPayments(true)
+        setDeleteDialogOpen(true)
       } else {
+        // Restore invoice on error
+        if (deletedInvoice) {
+          setInvoices(prev => [...prev, deletedInvoice].sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          ))
+        }
         setDeleteError(data.error || 'Failed to delete invoice')
+        setDeleteDialogOpen(true)
       }
     } catch (error) {
       console.error('Error deleting invoice:', error)
       setDeleteError('An unexpected error occurred')
+      // Refresh to get correct state
+      fetchInvoices()
     }
   }
 
-  if (loading) {
+  // Show minimal loading only on first load
+  if (loading && invoices.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">

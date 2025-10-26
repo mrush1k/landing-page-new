@@ -9,9 +9,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Skip middleware for API routes, static files, and Next.js internals
+  // Allow API routes to pass through - they handle their own auth
+  // This prevents double auth checks (middleware + API route)
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+  
+  // Skip middleware for static files and Next.js internals
   if (
-    request.nextUrl.pathname.startsWith('/api/') ||
     request.nextUrl.pathname.startsWith('/_next/') ||
     request.nextUrl.pathname.includes('.')
   ) {
@@ -26,7 +31,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/env-check', request.url))
   }
 
-  // Handle Supabase authentication
+  // Handle Supabase authentication for page routes only
   return await updateSession(request)
 }
 
