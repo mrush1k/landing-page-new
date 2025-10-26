@@ -23,7 +23,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [userProfile, setUserProfile] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileLastFetched, setProfileLastFetched] = useState<number>(0)
   const supabase = createClient()
+
+  // Cache TTL: 5 minutes (300000ms)
+  const PROFILE_CACHE_TTL = 300000
+
+  const isProfileStale = () => {
+    return Date.now() - profileLastFetched > PROFILE_CACHE_TTL
+  }
 
   useEffect(() => {
     // Get initial session
@@ -42,9 +50,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        await fetchUserProfile(session.user.id)
+        // Only refetch profile if it's stale or missing
+        if (!userProfile || isProfileStale()) {
+          await fetchUserProfile(session.user.id)
+        } else {
+          setLoading(false)
+        }
       } else {
         setUserProfile(null)
+        setProfileLastFetched(0)
         setLoading(false)
       }
     })
@@ -58,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const profile = await response.json()
         setUserProfile(profile)
+        setProfileLastFetched(Date.now())
       } else {
         // If API fails, create fallback profile from Supabase user data
         const { data: { session } } = await supabase.auth.getSession()

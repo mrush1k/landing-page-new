@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -141,6 +142,10 @@ model Invoice {
   @@index([dueDate])
   @@index([createdAt])
   @@index([number])
+  @@index([deletedAt])
+  @@index([userId, status])
+  @@index([userId, deletedAt])
+  @@index([customerId, status])
   @@map("invoices")
 }
 

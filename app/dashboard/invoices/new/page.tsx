@@ -8,64 +8,26 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarIcon, Plus, Trash2, ArrowLeft, Save, Send, UserPlus, FileText, Eye, PenTool, Upload } from 'lucide-react'
+import { CalendarIcon, Plus, UserPlus, FileText, PenTool, Upload } from 'lucide-react'
 import { format } from 'date-fns'
-import { cn, formatCurrency as formatCurrencyUtil } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
-import { Customer, InvoiceItem, COUNTRIES } from '@/lib/types'
+import { Customer, InvoiceItem } from '@/lib/types'
 import { useToast } from '@/hooks/use-toast'
-import Link from 'next/link'
+import { CURRENCIES, TAX_PRESETS, PAYMENT_TERMS } from '@/lib/constants/invoice-constants'
+import { CustomerFormData, SavedItem, emptyCustomerFormData } from '@/lib/types/invoice-types'
+import { useInvoiceCalculations } from '@/hooks/useInvoiceCalculations'
+import { generateBusinessInfo } from '@/lib/utils/invoice-helpers'
 
-const CURRENCIES = [
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
-  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
-  { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar' },
-]
-
-const TAX_PRESETS = [
-  { label: 'No Tax', value: 0 },
-  { label: 'GST 10%', value: 10 },
-  { label: 'VAT 20%', value: 20 },
-  { label: 'HST 13%', value: 13 },
-  { label: 'Custom', value: null },
-]
-
-const PAYMENT_TERMS = [
-  { label: 'Due on Receipt', value: 0 },
-  { label: 'Net 7', value: 7 },
-  { label: 'Net 15', value: 15 },
-  { label: 'Net 30', value: 30 },
-  { label: 'Net 60', value: 60 },
-  { label: 'Net 90', value: 90 },
-]
-
-interface CustomerFormData {
-  displayName: string
-  firstName: string
-  lastName: string
-  businessName: string
-  email: string
-  phone: string
-  address: string
-  city: string
-  state: string
-  zipCode: string
-  country: string
-  businessRegNumber: string
-}
-
-interface SavedItem {
-  id: string
-  name: string
-  description: string
-  unitPrice: number
-}
+// Component imports
+import { InvoiceHeader } from '@/components/invoices/InvoiceHeader'
+import { ItemRow } from '@/components/invoices/ItemRow'
+import { AdditionalInfoCard } from '@/components/invoices/AdditionalInfoCard'
+import { CustomerDialog } from '@/components/invoices/dialogs/CustomerDialog'
+import { SavedItemsDialog } from '@/components/invoices/dialogs/SavedItemsDialog'
+import { SignatureModal } from '@/components/invoices/dialogs/SignatureModal'
 
 export default function NewInvoicePage() {
   const router = useRouter()
@@ -80,20 +42,7 @@ export default function NewInvoicePage() {
   // Customer creation modal state
   const [showCustomerDialog, setShowCustomerDialog] = useState(false)
   const [showSavedItemsDialog, setShowSavedItemsDialog] = useState(false)
-  const [customerFormData, setCustomerFormData] = useState<CustomerFormData>({
-    displayName: '',
-    firstName: '',
-    lastName: '',
-    businessName: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    country: '',
-    businessRegNumber: '',
-  })
+  const [customerFormData, setCustomerFormData] = useState<CustomerFormData>(emptyCustomerFormData)
   
   // Header Section State
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -129,6 +78,16 @@ export default function NewInvoicePage() {
   const [poNumber, setPoNumber] = useState('')
   const [notes, setNotes] = useState('')
   const [selectedPaymentTerms, setSelectedPaymentTerms] = useState<number | null>(null)
+
+  // Use the calculations hook for all invoice calculations
+  const calculations = useInvoiceCalculations({
+    items,
+    taxRate,
+    taxInclusive,
+    discountType,
+    discountAmount,
+    currency: currency || userProfile?.currency || 'USD',
+  })
 
   useEffect(() => {
     if (user) {
@@ -172,8 +131,8 @@ export default function NewInvoicePage() {
 
   const loadBusinessInfo = () => {
     if (userProfile) {
-      const info = `${userProfile.displayName || 'Your Business'}\n${userProfile.address || ''}\n${userProfile.city ? `${userProfile.city}, ${userProfile.state || ''} ${userProfile.zipCode || ''}` : ''}\n${userProfile.phone || ''}\n${user?.email || ''}`
-      setBusinessInfo(info.replace(/\n+/g, '\n').trim())
+      const info = generateBusinessInfo(userProfile, user?.email)
+      setBusinessInfo(info)
     }
   }
 
@@ -195,20 +154,7 @@ export default function NewInvoicePage() {
   }
 
   const resetCustomerForm = () => {
-    setCustomerFormData({
-      displayName: '',
-      firstName: '',
-      lastName: '',
-      businessName: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
-      state: '',
-      zipCode: '',
-      country: '',
-      businessRegNumber: '',
-    })
+    setCustomerFormData(emptyCustomerFormData)
   }
 
   const handleCustomerSubmit = async (e: React.FormEvent) => {
@@ -244,10 +190,6 @@ export default function NewInvoicePage() {
     }
   }
 
-  const getCountryConfig = (countryCode: string) => {
-    return COUNTRIES.find(c => c.code === countryCode)
-  }
-
   const addItem = () => {
     setItems([...items, { name: '', description: '', quantity: undefined, unitPrice: undefined }])
   }
@@ -276,56 +218,6 @@ export default function NewInvoicePage() {
     const updatedItems = [...items]
     updatedItems[index] = { ...updatedItems[index], [field]: value }
     setItems(updatedItems)
-  }
-
-  const calculateItemTotal = (quantity?: number, unitPrice?: number) => {
-    if (!quantity || !unitPrice) return 0
-    return quantity * unitPrice
-  }
-
-  const calculateSubtotal = () => {
-    return items.reduce((sum, item) => {
-      return sum + calculateItemTotal(item.quantity, item.unitPrice)
-    }, 0)
-  }
-
-  const calculateTax = () => {
-    const subtotal = calculateSubtotal()
-    if (taxInclusive) {
-      // For inclusive tax, the tax is already included in the subtotal
-      // Tax = subtotal * (taxRate / (100 + taxRate))
-      return subtotal * (taxRate / (100 + taxRate))
-    } else {
-      // For exclusive tax, add tax on top of subtotal
-      return subtotal * (taxRate / 100)
-    }
-  }
-
-  const calculateDiscount = () => {
-    const subtotal = calculateSubtotal()
-    if (discountType === 'percentage') {
-      return subtotal * (discountAmount / 100)
-    }
-    return discountAmount
-  }
-
-  const calculateTotal = () => {
-    const subtotal = calculateSubtotal()
-    const tax = calculateTax()
-    const discount = calculateDiscount()
-    
-    if (taxInclusive) {
-      // For inclusive tax, subtotal already includes tax
-      // Total = subtotal - discount (tax is already in subtotal)
-      return subtotal - discount
-    } else {
-      // For exclusive tax, add tax on top
-      return subtotal + tax - discount
-    }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return formatCurrencyUtil(amount, currency || userProfile?.currency || 'USD')
   }
 
   const validateForm = () => {
@@ -391,11 +283,6 @@ export default function NewInvoicePage() {
         item.description && item.quantity && item.unitPrice
       )
 
-      const subtotal = calculateSubtotal()
-      const taxAmount = calculateTax()
-      const discountAmount = calculateDiscount()
-      const total = calculateTotal()
-      
       const invoiceData = {
         number: invoiceNumber,
         customerId,
@@ -404,10 +291,10 @@ export default function NewInvoicePage() {
         dueDate: dueDate!.toISOString(),
         poNumber: poNumber || null,
         notes: notes || null,
-        subtotal,
-        taxAmount,
+        subtotal: calculations.subtotal,
+        taxAmount: calculations.tax,
         taxInclusive,
-        total,
+        total: calculations.total,
         status,
         mySignature: mySignature || mySignatureFile || null,
         clientSignature: clientSignature || clientSignatureFile || null,
@@ -416,7 +303,7 @@ export default function NewInvoicePage() {
           description: item.description!,
           quantity: item.quantity!,
           unitPrice: item.unitPrice!,
-          total: calculateItemTotal(item.quantity, item.unitPrice)
+          total: calculations.getItemTotal(item.quantity, item.unitPrice)
         }))
       }
 
@@ -542,47 +429,12 @@ export default function NewInvoicePage() {
   return (
     <div className="container-mobile space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-          <Link href="/dashboard">
-            <Button variant="outline" size="sm" className="mobile-button w-full sm:w-auto">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <h1 className="mobile-h1">New Invoice</h1>
-        </div>
-        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 w-full sm:w-auto sm:flex sm:space-x-2">
-          <Button
-            variant="outline"
-            onClick={() => saveInvoice('DRAFT')}
-            disabled={loading}
-            className="mobile-button"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            <span className="hidden xs:inline">Save Draft</span>
-            <span className="xs:hidden">Save</span>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={previewPDF}
-            disabled={loading}
-            className="mobile-button"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            <span className="hidden xs:inline">Preview PDF</span>
-            <span className="xs:hidden">Preview</span>
-          </Button>
-          <Button
-            onClick={() => saveInvoice('SENT')}
-            disabled={loading}
-            className="mobile-button"
-          >
-            <Send className="w-4 h-4 mr-2" />
-            <span className="hidden xs:inline">Send Invoice</span>
-            <span className="xs:hidden">Send</span>
-          </Button>
-        </div>
-      </div>
+      <InvoiceHeader
+        onSaveDraft={() => saveInvoice('DRAFT')}
+        onPreview={previewPDF}
+        onSend={() => saveInvoice('SENT')}
+        loading={loading}
+      />
 
       <div className="space-y-4 sm:space-y-6">
         {/* A. Header Section */}
@@ -725,13 +577,13 @@ export default function NewInvoicePage() {
                       )}
                     </SelectContent>
                   </Select>
-                  <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="icon">
-                        <UserPlus className="w-4 h-4" />
-                      </Button>
-                    </DialogTrigger>
-                  </Dialog>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setShowCustomerDialog(true)}
+                  >
+                    <UserPlus className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -771,138 +623,16 @@ export default function NewInvoicePage() {
             
             {/* Items */}
             {items.map((item, index) => (
-              <div key={index} className="p-4 bg-gray-50 rounded-lg border">
-                {/* Mobile Layout */}
-                <div className="md:hidden space-y-4">
-                  <div className="flex justify-between items-start">
-                    <span className="text-sm font-semibold text-gray-700">Item #{index + 1}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeItem(index)}
-                      disabled={items.length === 1}
-                      className="h-8 w-8"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-sm font-medium mb-1 block">Item Name</Label>
-                      <Input
-                        value={item.name || ''}
-                        onChange={(e) => updateItem(index, 'name', e.target.value)}
-                        placeholder="Item name"
-                        className="h-11"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium mb-1 block">Description</Label>
-                      <Input
-                        value={item.description || ''}
-                        onChange={(e) => updateItem(index, 'description', e.target.value)}
-                        placeholder="Item description"
-                        className="h-11"
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-sm font-medium mb-1 block">Quantity</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.quantity || ''}
-                          onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          placeholder="1"
-                          className="h-11"
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm font-medium mb-1 block">Unit Price</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unitPrice || ''}
-                          onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          placeholder="1000"
-                          className="h-11"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium mb-1 block">Total</Label>
-                      <div className="h-11 px-3 py-2 bg-white border rounded-md flex items-center font-medium text-gray-800">
-                        {formatCurrency(calculateItemTotal(item.quantity, item.unitPrice))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Desktop Layout */}
-                <div className="hidden md:grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-2">
-                    <Input
-                      value={item.name || ''}
-                      onChange={(e) => updateItem(index, 'name', e.target.value)}
-                      placeholder="Item name"
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <Input
-                      value={item.description || ''}
-                      onChange={(e) => updateItem(index, 'description', e.target.value)}
-                      placeholder="Item description"
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.quantity || ''}
-                      onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                      placeholder="1"
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unitPrice || ''}
-                      onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                      placeholder="1000"
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <div className="h-11 px-3 py-2 bg-white border rounded-md flex items-center font-medium text-gray-800">
-                      {formatCurrency(calculateItemTotal(item.quantity, item.unitPrice))}
-                    </div>
-                  </div>
-                  <div className="col-span-1 flex justify-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeItem(index)}
-                      disabled={items.length === 1}
-                      className="h-11 w-11"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
+              <ItemRow
+                key={index}
+                item={item}
+                index={index}
+                onUpdate={updateItem}
+                onRemove={removeItem}
+                formatCurrency={calculations.formatCurrency}
+                getItemTotal={calculations.getItemTotal}
+                canRemove={items.length > 1}
+              />
             ))}
             
             {/* Action Buttons */}
@@ -915,36 +645,14 @@ export default function NewInvoicePage() {
                 Add Item
               </Button>
               
-              <Dialog open={showSavedItemsDialog} onOpenChange={setShowSavedItemsDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="flex-1 bg-gray-800 text-white hover:bg-gray-900">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Select Saved
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Select Saved Item</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    {savedItems.map((savedItem) => (
-                      <div key={savedItem.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <h4 className="font-medium">{savedItem.name}</h4>
-                          <p className="text-sm text-gray-600">{savedItem.description}</p>
-                          <p className="text-sm font-medium">{formatCurrency(savedItem.unitPrice)}</p>
-                        </div>
-                        <Button size="sm" onClick={() => addSavedItem(savedItem)}>
-                          Add
-                        </Button>
-                      </div>
-                    ))}
-                    {savedItems.length === 0 && (
-                      <p className="text-center text-gray-500 py-4">No saved items found</p>
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button 
+                variant="outline" 
+                className="flex-1 bg-gray-800 text-white hover:bg-gray-900"
+                onClick={() => setShowSavedItemsDialog(true)}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Select Saved
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1053,22 +761,22 @@ export default function NewInvoicePage() {
             <div className="bg-gray-50 p-4 rounded-lg space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Subtotal:</span>
-                <span className="font-medium">{formatCurrency(calculateSubtotal())}</span>
+                <span className="font-medium">{calculations.formatCurrency(calculations.subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">
                   Tax ({taxRate}% - {taxInclusive ? 'Inclusive' : 'Exclusive'}):
                 </span>
-                <span className="font-medium">{formatCurrency(calculateTax())}</span>
+                <span className="font-medium">{calculations.formatCurrency(calculations.tax)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Discount:</span>
-                <span className="font-medium text-red-600">-{formatCurrency(calculateDiscount())}</span>
+                <span className="font-medium text-red-600">-{calculations.formatCurrency(calculations.discount)}</span>
               </div>
               <div className="border-t pt-2">
                 <div className="flex justify-between">
                   <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-lg">{formatCurrency(calculateTotal())}</span>
+                  <span className="font-bold text-lg">{calculations.formatCurrency(calculations.total)}</span>
                 </div>
               </div>
             </div>
@@ -1180,241 +888,44 @@ export default function NewInvoicePage() {
         </Card>
 
         {/* Additional Notes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Additional Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="poNumber">Purchase Order Number</Label>
-              <Input
-                id="poNumber"
-                value={poNumber}
-                onChange={(e) => setPoNumber(e.target.value)}
-                placeholder="Purchase Order Number (optional)"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Additional notes or terms for the customer"
-                rows={3}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <AdditionalInfoCard
+          poNumber={poNumber}
+          setPoNumber={setPoNumber}
+          notes={notes}
+          setNotes={setNotes}
+        />
       </div>
 
-      {/* Customer Creation Modal */}
-      <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Customer</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCustomerSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="displayName">Display Name *</Label>
-                <Input
-                  id="displayName"
-                  value={customerFormData.displayName}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, displayName: e.target.value })}
-                  required
-                  placeholder="Name shown on invoices"
-                />
-              </div>
+      {/* Dialogs */}
+      <CustomerDialog
+        open={showCustomerDialog}
+        onOpenChange={setShowCustomerDialog}
+        formData={customerFormData}
+        setFormData={setCustomerFormData}
+        onSubmit={handleCustomerSubmit}
+        onCancel={() => {
+          setShowCustomerDialog(false)
+          resetCustomerForm()
+        }}
+      />
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={customerFormData.email}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                  placeholder="customer@example.com"
-                />
-              </div>
+      <SavedItemsDialog
+        open={showSavedItemsDialog}
+        onOpenChange={setShowSavedItemsDialog}
+        savedItems={savedItems}
+        onSelectItem={addSavedItem}
+        formatCurrency={calculations.formatCurrency}
+      />
 
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  value={customerFormData.firstName}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, firstName: e.target.value })}
-                  placeholder="John"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  value={customerFormData.lastName}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, lastName: e.target.value })}
-                  placeholder="Doe"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="businessName">Business Name</Label>
-                <Input
-                  id="businessName"
-                  value={customerFormData.businessName}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, businessName: e.target.value })}
-                  placeholder="Acme Corp"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={customerFormData.phone}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                  placeholder="+1 (555) 123-4567"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="country">Country</Label>
-                <Select 
-                  value={customerFormData.country} 
-                  onValueChange={(value) => setCustomerFormData({ ...customerFormData, country: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((country) => (
-                      <SelectItem key={country.code} value={country.code}>
-                        {country.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Dynamic Business Registration Field */}
-              {customerFormData.country && getCountryConfig(customerFormData.country) && (
-                <div className="space-y-2">
-                  <Label htmlFor="businessRegNumber">
-                    {getCountryConfig(customerFormData.country)?.businessRegLabel}
-                  </Label>
-                  <Input
-                    id="businessRegNumber"
-                    value={customerFormData.businessRegNumber}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, businessRegNumber: e.target.value })}
-                    placeholder={`Enter ${getCountryConfig(customerFormData.country)?.businessRegLabel}`}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Address Section */}
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Address (Optional)</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="address">Street Address</Label>
-                  <Input
-                    id="address"
-                    value={customerFormData.address}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
-                    placeholder="123 Main Street"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    value={customerFormData.city}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, city: e.target.value })}
-                    placeholder="New York"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="state">State/Province</Label>
-                  <Input
-                    id="state"
-                    value={customerFormData.state}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, state: e.target.value })}
-                    placeholder="NY"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="zipCode">ZIP/Postal Code</Label>
-                  <Input
-                    id="zipCode"
-                    value={customerFormData.zipCode}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, zipCode: e.target.value })}
-                    placeholder="10001"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowCustomerDialog(false)
-                  resetCustomerForm()
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Customer
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Signature Modal */}
-      <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {signatureType === 'my' ? 'My Signature' : 'Client Signature'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <p className="text-gray-500">Draw signature here</p>
-              <p className="text-sm text-gray-400">Signature canvas would go here</p>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setShowSignatureModal(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => {
-                if (signatureType === 'my') {
-                  setMySignature('signature-data')
-                } else {
-                  setClientSignature('signature-data')
-                }
-                setShowSignatureModal(false)
-                toast({
-                  title: 'Signature saved',
-                  description: `${signatureType === 'my' ? 'Your' : 'Client'} signature has been saved.`,
-                })
-              }}>
-                Save Signature
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SignatureModal
+        open={showSignatureModal}
+        onOpenChange={setShowSignatureModal}
+        signatureType={signatureType}
+        onSave={(data) => {
+          if (signatureType === 'my') setMySignature(data)
+          else setClientSignature(data)
+        }}
+      />
     </div>
   )
 }

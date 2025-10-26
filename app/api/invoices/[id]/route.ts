@@ -151,15 +151,19 @@ export async function DELETE(
 
     const requestData = await request.json().catch(() => ({}))
 
-    // Find the invoice
+    // Optimized: Single query with minimal data
     const invoice = await prisma.invoice.findFirst({
       where: {
         id,
         userId: user.id,
-        deletedAt: null, // Don't allow deleting already deleted invoices
+        deletedAt: null,
       },
-      include: {
-        payments: true,
+      select: {
+        id: true,
+        status: true,
+        payments: {
+          select: { id: true },
+        },
       },
     })
 
@@ -190,10 +194,10 @@ export async function DELETE(
       }, { status: 400 })
     }
 
-    // Perform soft delete with audit trail
-    const result = await prisma.$transaction(async (tx) => {
-      // Soft delete the invoice (preserves all data for audit)
-      const deletedInvoice = await tx.invoice.update({
+    // Optimized: Parallel transaction operations
+    const result = await prisma.$transaction([
+      // Soft delete the invoice
+      prisma.invoice.update({
         where: { id },
         data: {
           deletedAt: new Date(),
@@ -201,10 +205,10 @@ export async function DELETE(
           deleteReason: requestData.reason || null,
           updatedAt: new Date(),
         },
-      })
-
+        select: { id: true }, // Only return minimal data
+      }),
       // Create audit log entry
-      await tx.invoiceAuditLog.create({
+      prisma.invoiceAuditLog.create({
         data: {
           invoiceId: id,
           userId: user.id,
@@ -213,10 +217,9 @@ export async function DELETE(
           oldStatus: invoice.status,
           newStatus: 'DELETED',
         },
-      })
-
-      return deletedInvoice
-    })
+        select: { id: true }, // Only return minimal data
+      }),
+    ])
 
     return NextResponse.json({
       message: 'Invoice deleted successfully',

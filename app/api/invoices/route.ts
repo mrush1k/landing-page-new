@@ -36,7 +36,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([])
     }
 
-    // Optimized query with selective field fetching
+    // Get pagination params from query
+    const { searchParams } = new URL(request.url)
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = parseInt(searchParams.get('offset') || '0')
+
+    // Optimized query with selective field fetching and pagination
     const invoices = await prisma.invoice.findMany({
       where: {
         userId: dbUser.id,
@@ -59,28 +64,19 @@ export async function GET(request: NextRequest) {
             id: true,
             displayName: true,
             email: true,
-            businessName: true,
           },
         },
-        items: {
+        // Use count instead of loading full arrays
+        _count: {
           select: {
-            id: true,
-            description: true,
-            quantity: true,
-            unitPrice: true,
-            total: true,
-          },
-        },
-        payments: {
-          select: {
-            id: true,
-            amount: true,
-            paymentDate: true,
-            paymentMethod: true,
+            items: true,
+            payments: true,
           },
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     })
 
     // Convert Decimal to number for JSON serialization
@@ -89,16 +85,6 @@ export async function GET(request: NextRequest) {
       subtotal: Number(invoice.subtotal),
       taxAmount: Number(invoice.taxAmount),
       total: Number(invoice.total),
-      items: invoice.items.map(item => ({
-        ...item,
-        quantity: Number(item.quantity),
-        unitPrice: Number(item.unitPrice),
-        total: Number(item.total),
-      })),
-      payments: invoice.payments.map(payment => ({
-        ...payment,
-        amount: Number(payment.amount),
-      })),
     }))
 
     return NextResponse.json(serializedInvoices)

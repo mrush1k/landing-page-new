@@ -39,8 +39,21 @@ export async function GET(
       return NextResponse.json(fallbackUserData)
     }
 
+    // Optimized: Single lookup with only needed fields
     const userData = await prisma.user.findUnique({
       where: { id: id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        displayName: true,
+        firstName: true,
+        lastName: true,
+        country: true,
+        currency: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
     if (!userData) {

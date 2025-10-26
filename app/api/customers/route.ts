@@ -16,11 +16,12 @@ export async function GET() {
       return NextResponse.json([])
     }
 
-    // Find database user record - fix the core issue here
-    let dbUser = await prisma.user.findUnique({ where: { id: user.id } })
-    if (!dbUser) {
-      dbUser = await prisma.user.findUnique({ where: { email: user.email || '' } })
-    }
+    // Optimized: Single database user lookup with index
+    const dbUser = await prisma.user.findUnique({ 
+      where: { id: user.id },
+      select: { id: true } // Only need the ID
+    })
+    
     if (!dbUser) {
       return NextResponse.json([])
     }

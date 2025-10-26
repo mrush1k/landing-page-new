@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
@@ -57,7 +57,7 @@ export default function InvoicesPage() {
     }
   }, [user])
 
-  // Polling for updates every 15 seconds
+  // Polling for updates every 60 seconds (reduced from 15s for better performance)
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null
     let activityTimeout: NodeJS.Timeout | null = null
@@ -68,7 +68,7 @@ export default function InvoicesPage() {
         activityTimeout = setTimeout(() => {
           setTrackingActivity('')
         }, 2000)
-      }, 15000)
+      }, 60000)
     }
     return () => {
       if (intervalId) clearInterval(intervalId)
@@ -126,30 +126,33 @@ export default function InvoicesPage() {
     return invoice.status.toLowerCase()
   }
 
-  const filteredInvoices = invoices
-    .filter(invoice => {
-      const matchesSearch =
-        invoice.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.customer?.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesStatus = statusFilter === 'all' || getInvoiceStatus(invoice) === statusFilter
-      return matchesSearch && matchesStatus
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'newest':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        case 'oldest':
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        case 'amount-high':
-          return b.total - a.total
-        case 'amount-low':
-          return a.total - b.total
-        case 'due-date':
-          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-        default:
-          return 0
-      }
-    })
+  // Memoize filtered and sorted invoices to prevent unnecessary recalculations
+  const filteredInvoices = useMemo(() => {
+    return invoices
+      .filter(invoice => {
+        const matchesSearch =
+          invoice.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          invoice.customer?.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesStatus = statusFilter === 'all' || getInvoiceStatus(invoice) === statusFilter
+        return matchesSearch && matchesStatus
+      })
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'newest':
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          case 'oldest':
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          case 'amount-high':
+            return b.total - a.total
+          case 'amount-low':
+            return a.total - b.total
+          case 'due-date':
+            return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+          default:
+            return 0
+        }
+      })
+  }, [invoices, searchTerm, statusFilter, sortBy])
 
   const handleSendEmail = async (invoiceId: string) => {
     try {
