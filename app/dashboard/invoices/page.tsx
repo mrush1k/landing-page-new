@@ -28,8 +28,7 @@ const statusColors = {
   approved: 'bg-yellow-100 text-yellow-800',
   paid: 'bg-green-100 text-green-800',
   overdue: 'bg-red-100 text-red-800',
-  'partially-paid': 'bg-orange-100 text-orange-800',
-  voided: 'bg-red-100 text-red-800 border-red-200'
+  'partially-paid': 'bg-orange-100 text-orange-800'
 }
 
 export default function InvoicesPage() {
@@ -447,7 +446,7 @@ export default function InvoicesPage() {
                           {invoice.number}
                         </div>
                         <Badge className={statusColors[status as keyof typeof statusColors]}>
-                          {status === 'voided' ? 'VOIDED' : status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
+                          {status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
                         </Badge>
                       </div>
                       <div className="space-y-2 mb-3">
@@ -565,7 +564,7 @@ export default function InvoicesPage() {
                             <TableCell>{invoice.customer?.displayName || 'No Customer'}</TableCell>
                             <TableCell>
                               <Badge className={statusColors[status as keyof typeof statusColors]}>
-                                {status === 'voided' ? 'VOIDED' : status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
+                                {status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
                               </Badge>
                             </TableCell>
                             <TableCell>{new Date(invoice.issueDate).toLocaleDateString()}</TableCell>

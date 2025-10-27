@@ -123,9 +123,6 @@ model Invoice {
   emailBouncedAt    DateTime?
   deliveryStatus    String?       // 'sent', 'delivered', 'bounced', 'failed'
   trackingId        String?       // Unique ID for email tracking
-  voidedAt          DateTime?     // When invoice was voided
-  voidedBy          String?       // User ID who voided it
-  voidReason        String?       // Optional reason for voiding
   deletedAt         DateTime?     // Soft delete timestamp
   deletedBy         String?       // User ID who deleted it
   deleteReason      String?       // Optional reason for deletion
@@ -146,6 +143,10 @@ model Invoice {
   @@index([userId, status])
   @@index([userId, deletedAt])
   @@index([customerId, status])
+  // Performance indexes for reports
+  @@index([userId, status, updatedAt])
+  @@index([userId, deletedAt, status, dueDate])
+  @@index([updatedAt, status])
   @@map("invoices")
 }
 
@@ -304,7 +305,6 @@ enum InvoiceStatus {
   PARTIALLY_PAID
   OVERDUE
   CANCELLED
-  VOIDED
 }
 
 enum EstimateStatus {
@@ -330,7 +330,7 @@ model InvoiceAuditLog {
   id          String   @id @default(uuid())
   invoiceId   String
   userId      String
-  action      String   // 'VOIDED', 'DELETED', 'RESTORED', etc.
+  action      String   // 'DELETED', 'RESTORED', etc.
   reason      String?
   oldStatus   String?
   newStatus   String?

@@ -244,7 +244,7 @@ git reset --hard HEAD
 - [x] No breaking changes to API contracts
 - [x] All TypeScript compiles without errors
 - [x] Soft delete logic preserved (deletedAt, audit logs)
-- [x] Business rules maintained (can only delete DRAFT/VOIDED)
+- [x] Business rules maintained (can only delete DRAFT/CANCELLED) - VOIDED status removed
 - [x] Payment validation still works
 - [x] User authorization checks unchanged
 - [x] Database indexes created successfully

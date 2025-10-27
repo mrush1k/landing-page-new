@@ -171,7 +171,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // Allow deletion for all invoice statuses. Previously only DRAFT/VOIDED were deletable.
+    // Allow deletion for all invoice statuses. Previously only DRAFT invoices were deletable.
     // Keep soft-delete semantics and a payments-confirmation flow for safety.
 
     // Warning if invoice has payments

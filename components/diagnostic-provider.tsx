@@ -33,9 +33,13 @@ export function DiagnosticProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   const runStartupDiagnostics = async () => {
+    // Import the new startup diagnostics from logger
+    const { runStartupDiagnostics: runLoggerDiagnostics } = await import('@/lib/diagnostic-logger')
+    await runLoggerDiagnostics()
+    
     setIsRunningDiagnostics(true)
     try {
-      diagnosticLogger.logDiagnostic('info', 'diagnostic-provider', 'Running startup diagnostics...')
+      diagnosticLogger.logDiagnostic('info', 'diagnostic-provider', 'Running engine diagnostics...')
       
       const results = await diagnosticEngine.runStartupDiagnostics()
       setStartupResults(results)

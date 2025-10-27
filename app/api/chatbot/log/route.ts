@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 
-import { prisma } from '@/lib/prisma'
+import { prisma, withRetry } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,16 +14,18 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Store interaction in database
-    const interaction = await prisma.chatbotInteraction.create({
-      data: {
-        userId,
-        userMessage,
-        botResponse,
-        action: action ? JSON.stringify(action) : null,
-        timestamp: new Date(timestamp || Date.now())
-      }
-    })
+    // Store interaction in database with retry logic
+    const interaction = await withRetry(() =>
+      prisma.chatbotInteraction.create({
+        data: {
+          userId,
+          userMessage,
+          botResponse,
+          action: action ? JSON.stringify(action) : null,
+          timestamp: new Date(timestamp || Date.now())
+        }
+      })
+    )
     
     return NextResponse.json({ 
       success: true, 
@@ -51,15 +53,30 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
-    
-    // Get user's chatbot interaction history
-    const interactions = await prisma.chatbotInteraction.findMany({
-      where: { userId },
-      orderBy: { timestamp: 'desc' },
-      take: limit
+
+    // Add cache headers for better performance
+    const headers = new Headers({
+      'Cache-Control': 'private, max-age=180, stale-while-revalidate=30',
+      'Content-Type': 'application/json'
     })
     
-    return NextResponse.json({ interactions })
+    // Get user's chatbot interaction history with retry logic and optimized query
+    const interactions = await withRetry(() =>
+      prisma.chatbotInteraction.findMany({
+        where: { userId },
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          userMessage: true,
+          botResponse: true,
+          action: true,
+          timestamp: true
+        }
+      })
+    )
+    
+    return NextResponse.json({ interactions }, { headers })
     
   } catch (error) {
     console.error('Error fetching chatbot interactions:', error)

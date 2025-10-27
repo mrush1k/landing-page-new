@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 import { createClient } from '@/utils/supabase/server'
 
-import { prisma } from '@/lib/prisma'
+import { prisma, withRetry } from '@/lib/prisma'
 
 // Helper: resolve database user (try id -> fallback to email)
 async function resolveDbUser(supabaseUser: any) {
@@ -41,13 +41,20 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Optimized query with selective field fetching and pagination
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        userId: dbUser.id,
-        deletedAt: null, // Only show non-deleted invoices
-      },
-      select: {
+    // Add cache headers for better performance  
+    const headers = new Headers({
+      'Cache-Control': 'private, max-age=180, stale-while-revalidate=60',
+      'Content-Type': 'application/json'
+    })
+
+    // Optimized query with selective field fetching, pagination and retry logic
+    const invoices = await withRetry(() =>
+      prisma.invoice.findMany({
+        where: {
+          userId: dbUser.id,
+          deletedAt: null, // Only show non-deleted invoices
+        },
+        select: {
         id: true,
         number: true,
         status: true,
@@ -78,6 +85,7 @@ export async function GET(request: NextRequest) {
       take: limit,
       skip: offset,
     })
+    )
 
     // Convert Decimal to number for JSON serialization
     const serializedInvoices = invoices.map(invoice => ({
@@ -87,7 +95,7 @@ export async function GET(request: NextRequest) {
       total: Number(invoice.total),
     }))
 
-    return NextResponse.json(serializedInvoices)
+    return NextResponse.json(serializedInvoices, { headers })
   } catch (error) {
     console.error('Error fetching invoices:', error)
     return NextResponse.json(

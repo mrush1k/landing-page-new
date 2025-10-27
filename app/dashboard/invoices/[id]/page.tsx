@@ -24,7 +24,6 @@ import {
   FileText,
   Download,
   Mail,
-  Ban,
   Trash2
 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -73,9 +72,7 @@ export default function InvoiceDetailPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
-  const [showVoidModal, setShowVoidModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [voidReason, setVoidReason] = useState('')
   const [deleteReason, setDeleteReason] = useState('')
   const [markingPaid, setMarkingPaid] = useState(false)
   
@@ -392,14 +389,19 @@ export default function InvoiceDetailPage() {
 
     try {
       const headers = await getAuthHeaders()
+      const requestBody = {
+        recipientEmail: emailForm.recipientEmail,
+        ccEmails: emailForm.ccEmails,
+        message: emailForm.message,
+      }
+      
+      console.log('Sending email request with body:', requestBody)
+      console.log('Request headers:', headers)
+      
       const response = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          recipientEmail: emailForm.recipientEmail,
-          ccEmails: emailForm.ccEmails,
-          message: emailForm.message,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (response.ok) {
@@ -424,7 +426,7 @@ export default function InvoiceDetailPage() {
         
         toast({
           title: "Success",
-          description: `Invoice sent successfully to ${result.sentTo}${result.statusUpdated ? ' and status updated to Sent' : ''}`,
+          description: `Invoice queued for sending to ${result.sentTo}${result.statusUpdated ? ' and status updated to Sent' : ''}. Email will be delivered shortly.`,
         })
       } else {
         const error = await response.json()
@@ -450,7 +452,6 @@ export default function InvoiceDetailPage() {
       [InvoiceStatus.PARTIALLY_PAID]: { label: 'Partially Paid', variant: 'default' as const },
       [InvoiceStatus.OVERDUE]: { label: 'Overdue', variant: 'destructive' as const },
       [InvoiceStatus.CANCELLED]: { label: 'Cancelled', variant: 'secondary' as const },
-      [InvoiceStatus.VOIDED]: { label: 'Voided', variant: 'destructive' as const },
     }
     
     const config = statusConfig[status]
@@ -471,57 +472,14 @@ export default function InvoiceDetailPage() {
     return invoice.total - getTotalPaid()
   }
 
-  const canVoidInvoice = (invoice: Invoice) => {
-    const voidableStatuses = [InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.READ, InvoiceStatus.APPROVED, InvoiceStatus.OVERDUE, InvoiceStatus.CANCELLED]
-    return voidableStatuses.includes(invoice.status) && !invoice.voidedAt
-  }
+
 
   const canDeleteInvoice = (invoice: Invoice) => {
     // Allow deletion for all statuses (except already deleted). Soft-delete is used server-side.
     return !invoice.deletedAt
   }
 
-  const handleVoidInvoice = async () => {
-    if (!invoice) return
 
-    try {
-      const headers = await getAuthHeaders()
-      const response = await fetch(`/api/invoices/${invoice.id}/void`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ 
-          reason: voidReason || null,
-          confirmWithPayments: true
-        }),
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setInvoice(result.invoice)
-        setShowVoidModal(false)
-        setVoidReason('')
-        
-        toast({
-          title: "Success",
-          description: `Invoice ${invoice.number} has been voided${result.hasPaymentsWarning ? '. Payment records are preserved.' : ''}.`,
-        })
-      } else {
-        const error = await response.json()
-        toast({
-          title: "Error",
-          description: error.error || "Failed to void invoice",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error('Error voiding invoice:', error)
-      toast({
-        title: "Error",
-        description: "Failed to void invoice",
-        variant: "destructive",
-      })
-    }
-  }
 
   const handleDeleteInvoice = async () => {
     if (!invoice) return
@@ -712,17 +670,7 @@ export default function InvoiceDetailPage() {
                 <span className="sm:hidden">PDF</span>
               </Button>
               
-              {canVoidInvoice(invoice) && (
-                <Button
-                  variant="outline"
-                  onClick={() => setShowVoidModal(true)}
-                  className="touch-target col-span-1"
-                >
-                  <Ban className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Void Invoice</span>
-                  <span className="sm:hidden">Void</span>
-                </Button>
-              )}
+
               
               {canDeleteInvoice(invoice) && (
                 <Button
@@ -1161,50 +1109,7 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Void Invoice Modal */}
-      <AlertDialog open={showVoidModal} onOpenChange={setShowVoidModal}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Void Invoice {invoice.number}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will mark the invoice as voided. The invoice will be kept for audit purposes but cannot be sent or edited.
-              {invoice.payments && invoice.payments.length > 0 && 
-                " This invoice has payments recorded. Voiding will not affect the payment records."
-              }
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="void-reason" className="text-right">
-                Reason
-              </Label>
-              <Textarea
-                id="void-reason"
-                value={voidReason}
-                onChange={(e) => setVoidReason(e.target.value)}
-                placeholder="Optional reason for voiding..."
-                className="col-span-3"
-                rows={3}
-              />
-            </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setShowVoidModal(false)
-              setVoidReason('')
-            }}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleVoidInvoice}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              <Ban className="w-4 h-4 mr-2" />
-              Void Invoice
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
 
       {/* Delete Invoice Modal */}
       <AlertDialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>

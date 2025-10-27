@@ -242,35 +242,7 @@ export const generateInvoicePDF = (invoice: Invoice, userProfile: User) => {
   const splitTerms = doc.splitTextToSize(terms, 170)
   doc.text(splitTerms, 20, termsY + 8)
   
-  // Add VOID watermark if invoice is voided
-  if (invoice.status === InvoiceStatus.VOIDED) {
-    addVoidWatermark(doc)
-  }
-  
   return doc
-}
-
-// Helper function to add VOID watermark
-const addVoidWatermark = (doc: jsPDF) => {
-  // Set watermark properties
-  doc.setFontSize(60)
-  doc.setTextColor(220, 53, 69) // Red color (Bootstrap danger color)
-  doc.setFont('helvetica', 'bold')
-  
-  // Add rotated VOID text in center of page
-  const pageWidth = doc.internal.pageSize.width
-  const pageHeight = doc.internal.pageSize.height
-  
-  // Rotate and center the text with reduced opacity effect
-  doc.text('VOID', pageWidth / 2, pageHeight / 2, {
-    align: 'center',
-    angle: 45
-  })
-  
-  // Reset to normal text properties
-  doc.setFontSize(12)
-  doc.setTextColor(0, 0, 0)
-  doc.setFont('helvetica', 'normal')
 }
 
 // Helper function to get tax label based on country

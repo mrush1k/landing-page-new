@@ -29,6 +29,9 @@ export default function DashboardPage() {
   const { user, userProfile, getAuthHeaders } = useAuth()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Show page immediately if user exists, even without full profile
+  const showContent = user !== null
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -117,7 +120,8 @@ export default function DashboardPage() {
     return formatCurrencyUtil(amount, currency || userProfile?.currency || 'USD')
   }, [userProfile?.currency])
 
-  if (loading) {
+  // Show skeleton only if no user at all, not while profile is loading
+  if (!showContent) {
     return (
       <div className="container-mobile">
         <DashboardSkeleton />
@@ -133,9 +137,13 @@ export default function DashboardPage() {
       <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-          {userProfile?.businessName && (
+          {userProfile?.businessName ? (
             <p className="text-lg sm:text-xl text-gray-600 mt-1">
               Welcome {userProfile.businessName}! 👋
+            </p>
+          ) : (
+            <p className="text-lg sm:text-xl text-gray-600 mt-1">
+              Welcome {user?.email?.split('@')[0] || 'User'}! 👋
             </p>
           )}
         </div>

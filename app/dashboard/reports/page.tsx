@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,7 +45,8 @@ export default function ReportsPage() {
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 10 }, (_, i) => currentYear - i)
 
-  const fetchSummaryData = async () => {
+  // Memoize API calls to prevent unnecessary re-fetches
+  const fetchSummaryData = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -62,9 +63,9 @@ export default function ReportsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [dateFrom, dateTo])
 
-  const fetchCashflowData = async (year: string) => {
+  const fetchCashflowData = useCallback(async (year: string) => {
     setLoading(true)
     try {
       const response = await fetch(`/api/reports/cashflow?year=${year}`)
@@ -78,20 +79,20 @@ export default function ReportsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchCashflowData(selectedYear)
-  }, [selectedYear])
+  }, [selectedYear, fetchCashflowData])
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat('en-AU', {
       style: 'currency',
       currency: 'AUD',
     }).format(amount)
-  }
+  }, [])
 
-  const setPresetDateRange = (preset: string) => {
+  const setPresetDateRange = useCallback((preset: string) => {
     const today = new Date()
     const currentYear = today.getFullYear()
     const currentMonth = today.getMonth()
@@ -116,19 +117,19 @@ export default function ReportsPage() {
         setDateTo(format(new Date(currentYear - 1, 11, 31), 'yyyy-MM-dd'))
         break
     }
-  }
+  }, [])
 
-  const chartData = cashflowData.map(item => ({
+  const chartData = useMemo(() => cashflowData.map(item => ({
     name: item.month,
     income: item.income
-  }))
+  })), [cashflowData])
 
-  const chartConfig: ChartConfig = {
+  const chartConfig: ChartConfig = useMemo(() => ({
     income: {
       label: "Income",
       color: "hsl(var(--primary))",
     },
-  }
+  }), [])
 
   return (
     <div className="space-y-6">
@@ -139,276 +140,258 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="summary" className="space-y-6">
+      <Tabs defaultValue="cashflow" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="cashflow">Cashflow Analysis</TabsTrigger>
           <TabsTrigger value="summary">Invoice Summary</TabsTrigger>
-          <TabsTrigger value="cashflow">Cashflow Tracker</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="cashflow" className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <Label>Year</Label>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {loading && <div className="text-sm text-muted-foreground">Loading...</div>}
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {outstandingBalances && (
+              <>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-red-600">
+                      {formatCurrency(outstandingBalances.overdue.total)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {outstandingBalances.overdue.count} invoice{outstandingBalances.overdue.count !== 1 ? 's' : ''}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {formatCurrency(outstandingBalances.pending.total)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {outstandingBalances.pending.count} invoice{outstandingBalances.pending.count !== 1 ? 's' : ''}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Outstanding</CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(outstandingBalances.total)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total unpaid amount
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">YTD Income</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(
+                        cashflowData.reduce((sum, month) => sum + month.income, 0)
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Year to date
+                    </p>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+
+          {chartData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Monthly Income Trend - {selectedYear}</CardTitle>
+                <CardDescription>
+                  Track your monthly income performance throughout the year
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={chartConfig} className="h-[400px]">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip 
+                      formatter={(value) => [formatCurrency(Number(value)), "Income"]}
+                      labelStyle={{ color: 'black' }}
+                      contentStyle={{ 
+                        backgroundColor: 'white', 
+                        border: '1px solid #ccc',
+                        borderRadius: '6px'
+                      }}
+                    />
+                    <Bar 
+                      dataKey="income" 
+                      fill="var(--color-income)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         <TabsContent value="summary" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Invoice Summary Generator
-              </CardTitle>
+              <CardTitle>Filter Reports</CardTitle>
               <CardDescription>
-                Generate comprehensive summaries of your invoices for any date range.
+                Select a date range to view invoice summary data
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-4 items-end">
                 <div className="space-y-2">
-                  <Label>Quick Presets</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPresetDateRange('thisMonth')}
-                    >
-                      This Month
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPresetDateRange('lastMonth')}
-                    >
-                      Last Month
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPresetDateRange('thisYear')}
-                    >
-                      This Year
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPresetDateRange('lastYear')}
-                    >
-                      Last Year
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="dateFrom">From Date</Label>
+                  <Label htmlFor="date-from">From Date</Label>
                   <Input
-                    id="dateFrom"
+                    id="date-from"
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
                   />
                 </div>
-                
                 <div className="space-y-2">
-                  <Label htmlFor="dateTo">To Date</Label>
+                  <Label htmlFor="date-to">To Date</Label>
                   <Input
-                    id="dateTo"
+                    id="date-to"
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
                   />
                 </div>
-                
-                <div className="space-y-2">
-                  <Label>Generate Report</Label>
-                  <Button 
-                    onClick={fetchSummaryData}
-                    disabled={loading}
-                    className="w-full"
-                  >
-                    {loading ? 'Loading...' : 'Generate Summary'}
-                  </Button>
-                </div>
+                <Button onClick={fetchSummaryData} disabled={loading}>
+                  {loading ? 'Loading...' : 'Generate Report'}
+                </Button>
               </div>
-
-              {summaryData && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="border-green-200 bg-green-50">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-green-600 text-sm font-medium">Paid Invoices</p>
-                          <p className="text-2xl font-bold text-green-700">{summaryData.paid.count}</p>
-                          <p className="text-sm text-green-600">{formatCurrency(summaryData.paid.total)}</p>
-                        </div>
-                        <DollarSign className="h-8 w-8 text-green-500" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-yellow-200 bg-yellow-50">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-yellow-600 text-sm font-medium">Unpaid Invoices</p>
-                          <p className="text-2xl font-bold text-yellow-700">{summaryData.unpaid.count}</p>
-                          <p className="text-sm text-yellow-600">{formatCurrency(summaryData.unpaid.total)}</p>
-                        </div>
-                        <Clock className="h-8 w-8 text-yellow-500" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-red-200 bg-red-50">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-red-600 text-sm font-medium">Overdue Invoices</p>
-                          <p className="text-2xl font-bold text-red-700">{summaryData.overdue.count}</p>
-                          <p className="text-sm text-red-600">{formatCurrency(summaryData.overdue.total)}</p>
-                        </div>
-                        <FileText className="h-8 w-8 text-red-500" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-blue-200 bg-blue-50">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-blue-600 text-sm font-medium">Tax Collected</p>
-                          <p className="text-2xl font-bold text-blue-700">{formatCurrency(summaryData.taxCollected)}</p>
-                          <p className="text-sm text-blue-600">{summaryData.period}</p>
-                        </div>
-                        <TrendingUp className="h-8 w-8 text-blue-500" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+              
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPresetDateRange('thisMonth')}>
+                  This Month
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPresetDateRange('lastMonth')}>
+                  Last Month
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPresetDateRange('thisYear')}>
+                  This Year
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPresetDateRange('lastYear')}>
+                  Last Year
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="cashflow" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Monthly Income Trend
-                </CardTitle>
-                <CardDescription>
-                  Track your monthly income performance for {selectedYear}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <Select value={selectedYear} onValueChange={setSelectedYear}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="Select year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {years.map((year) => (
-                        <SelectItem key={year} value={year.toString()}>
-                          {year}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {chartData.length > 0 ? (
-                  <ChartContainer config={chartConfig} className="h-[300px]">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis tickFormatter={(value) => formatCurrency(value).replace('AUD', '$')} />
-                      <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Income']} />
-                      <Bar dataKey="income" fill="var(--color-income)" />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                    {loading ? 'Loading...' : 'No data available for this period'}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="space-y-6">
+          {summaryData && (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Cashflow Insights</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Paid Invoices</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Total Income ({selectedYear})</p>
-                    <p className="text-2xl font-bold">
-                      {formatCurrency(chartData.reduce((sum, item) => sum + item.income, 0))}
-                    </p>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(summaryData.paid.total)}
                   </div>
-                  
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Average Monthly Income</p>
-                    <p className="text-xl font-semibold">
-                      {formatCurrency(chartData.length > 0 ? chartData.reduce((sum, item) => sum + item.income, 0) / chartData.length : 0)}
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Best Month</p>
-                    <p className="text-lg font-semibold text-green-600">
-                      {chartData.length > 0 
-                        ? (() => {
-                            const best = chartData.reduce((max, item) => item.income > max.income ? item : max, chartData[0])
-                            return `${best.name}: ${formatCurrency(best.income)}`
-                          })()
-                        : 'No data'
-                      }
-                    </p>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {summaryData.paid.count} invoice{summaryData.paid.count !== 1 ? 's' : ''}
+                  </p>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg text-amber-600">Outstanding Balances</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Unpaid Invoices</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  {outstandingBalances ? (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center p-2 bg-red-50 rounded">
-                        <div>
-                          <span className="text-sm font-medium">Overdue Invoices</span>
-                          <p className="text-xs text-red-600">{outstandingBalances.overdue.count} invoices</p>
-                        </div>
-                        <span className="font-semibold text-red-600">
-                          {formatCurrency(outstandingBalances.overdue.total)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex justify-between items-center p-2 bg-yellow-50 rounded">
-                        <div>
-                          <span className="text-sm font-medium">Pending Invoices</span>
-                          <p className="text-xs text-yellow-600">{outstandingBalances.pending.count} invoices</p>
-                        </div>
-                        <span className="font-semibold text-yellow-600">
-                          {formatCurrency(outstandingBalances.pending.total)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex justify-between items-center p-2 bg-gray-50 rounded border-t">
-                        <span className="text-sm font-bold">Total Outstanding:</span>
-                        <span className="font-bold text-lg">
-                          {formatCurrency(outstandingBalances.total)}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">Loading outstanding balances...</span>
-                      </div>
-                    </div>
-                  )}
+                  <div className="text-2xl font-bold text-yellow-600">
+                    {formatCurrency(summaryData.unpaid.total)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {summaryData.unpaid.count} invoice{summaryData.unpaid.count !== 1 ? 's' : ''}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">
+                    {formatCurrency(summaryData.overdue.total)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {summaryData.overdue.count} invoice{summaryData.overdue.count !== 1 ? 's' : ''}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Tax Collected</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(summaryData.taxCollected)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {summaryData.period}
+                  </p>
                 </CardContent>
               </Card>
             </div>
-          </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

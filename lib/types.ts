@@ -92,10 +92,7 @@ export interface Invoice {
   emailBouncedAt?: Date
   deliveryStatus?: string
   trackingId?: string
-  // Void and delete audit fields
-  voidedAt?: Date
-  voidedBy?: string
-  voidReason?: string
+  // Delete audit fields
   deletedAt?: Date
   deletedBy?: string
   deleteReason?: string
@@ -138,8 +135,7 @@ export enum InvoiceStatus {
   PAID = 'PAID',
   PARTIALLY_PAID = 'PARTIALLY_PAID',
   OVERDUE = 'OVERDUE',
-  CANCELLED = 'CANCELLED',
-  VOIDED = 'VOIDED'
+  CANCELLED = 'CANCELLED'
 }
 
 export enum PaymentMethod {
@@ -308,10 +304,6 @@ export interface InvoiceAuditLog {
   oldStatus?: string
   newStatus?: string
   timestamp: Date
-}
-
-export interface VoidInvoiceData {
-  reason?: string
 }
 
 export interface DeleteInvoiceData {

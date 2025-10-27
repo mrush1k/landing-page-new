@@ -121,11 +121,13 @@ export function EmailTrackingStatus({ invoice, className }: EmailTrackingStatusP
               invoice.deliveryStatus === 'delivered' ? 'bg-green-100 text-green-800' :
               invoice.deliveryStatus === 'bounced' ? 'bg-red-100 text-red-800' :
               invoice.deliveryStatus === 'failed' ? 'bg-red-100 text-red-800' :
+              invoice.deliveryStatus === 'queued' ? 'bg-yellow-100 text-yellow-800' :
               'bg-blue-100 text-blue-800'
             }>
               {invoice.deliveryStatus === 'delivered' && <Truck className="w-3 h-3 mr-1" />}
               {invoice.deliveryStatus === 'bounced' && <XCircle className="w-3 h-3 mr-1" />}
               {invoice.deliveryStatus === 'failed' && <AlertCircle className="w-3 h-3 mr-1" />}
+              {invoice.deliveryStatus === 'queued' && <Clock className="w-3 h-3 mr-1" />}
               {invoice.deliveryStatus === 'sent' && <Mail className="w-3 h-3 mr-1" />}
               {invoice.deliveryStatus}
             </Badge>

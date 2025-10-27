@@ -1,9 +1,10 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useEffect, useState, useContext } from 'react'
 import { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/utils/supabase/client'
 import { User } from './types'
+import { performanceMonitor } from './performance-monitor'
 
 interface AuthContextType {
   user: SupabaseUser | null
@@ -34,13 +35,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    // Get initial session
+    performanceMonitor.startTimer('auth-initialization')
+    
+    // Get initial session with faster loading
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        fetchUserProfile(session.user.id)
+        // Set loading to false immediately for faster page rendering
+        setLoading(false)
+        performanceMonitor.endTimer('auth-initialization')
+        
+        // Fetch profile in background without blocking UI
+        if (!userProfile || isProfileStale()) {
+          fetchUserProfile(session.user.id)
+        }
       } else {
         setLoading(false)
+        performanceMonitor.endTimer('auth-initialization')
       }
     })
 
@@ -50,11 +61,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        // Only refetch profile if it's stale or missing
+        // Set loading to false immediately
+        setLoading(false)
+        // Only refetch profile if it's stale or missing, in background
         if (!userProfile || isProfileStale()) {
-          await fetchUserProfile(session.user.id)
-        } else {
-          setLoading(false)
+          fetchUserProfile(session.user.id)
         }
       } else {
         setUserProfile(null)
@@ -68,11 +79,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      performanceMonitor.startTimer('profile-fetch')
+      
+      // Don't set loading true - fetch profile in background
       const response = await fetch(`/api/users/${userId}`)
       if (response.ok) {
         const profile = await response.json()
         setUserProfile(profile)
         setProfileLastFetched(Date.now())
+        
+        performanceMonitor.endTimer('profile-fetch')
       } else {
         // If API fails, create fallback profile from Supabase user data
         const { data: { session } } = await supabase.auth.getSession()
@@ -117,9 +133,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (fallbackError) {
         console.error('Error creating fallback profile:', fallbackError)
       }
-    } finally {
-      setLoading(false)
     }
+    // Remove finally block - don't set loading false here since we're not blocking
   }
 
   const signUp = async (email: string, password: string, userData: Partial<User>) => {

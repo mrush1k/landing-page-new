@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { prisma } from '@/lib/prisma'
+import { prisma, withRetry } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
@@ -8,6 +8,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    
+    // Add caching headers for faster subsequent requests
+    const headers = new Headers({
+      'Cache-Control': 'private, max-age=300, stale-while-revalidate=60',
+      'Content-Type': 'application/json'
+    })
     
     // Get user from Supabase auth using server client
     const supabase = await createClient()
@@ -37,26 +43,28 @@ export async function GET(
         createdAt: new Date(),
         updatedAt: new Date()
       }
-      return NextResponse.json(fallbackUserData)
+      return NextResponse.json(fallbackUserData, { headers })
     }
 
-    // Optimized: Single lookup with only needed fields
-    const userData = await prisma.user.findUnique({
-      where: { id: id },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        displayName: true,
-        firstName: true,
-        lastName: true,
-        country: true,
-        currency: true,
-        onboardingCompleted: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    // Optimized: Single lookup with retry logic for connection issues
+    const userData = await withRetry(() => 
+      prisma.user.findUnique({
+        where: { id: id },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          displayName: true,
+          firstName: true,
+          lastName: true,
+          country: true,
+          currency: true,
+          onboardingCompleted: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+    )
 
     if (!userData) {
       // Fallback to Supabase data if not found in Prisma
@@ -73,10 +81,10 @@ export async function GET(
         createdAt: new Date(),
         updatedAt: new Date()
       }
-      return NextResponse.json(fallbackUserData)
+      return NextResponse.json(fallbackUserData, { headers })
     }
 
-    return NextResponse.json(userData)
+    return NextResponse.json(userData, { headers })
   } catch (error) {
     console.error('Error fetching user:', error)
     return NextResponse.json(
@@ -122,31 +130,33 @@ export async function PUT(
       return NextResponse.json(fallbackResponse)
     }
     
-    const userData = await prisma.user.update({
-      where: { id: id },
-      data: {
-        email: data.email,
-        username: data.username,
-        displayName: data.displayName,
-        country: data.country,
-        currency: data.currency,
-        workType: data.workType,
-        customWorkType: data.customWorkType,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        businessName: data.businessName,
-        businessRegNumber: data.businessRegNumber,
-        phone: data.phone,
-        address: data.address,
-        city: data.city,
-        state: data.state,
-        zipCode: data.zipCode,
-        postalCode: data.postalCode,
-        website: data.website,
-        dateFormat: data.dateFormat,
-        logoUrl: data.logoUrl,
-      },
-    })
+    const userData = await withRetry(() =>
+      prisma.user.update({
+        where: { id: id },
+        data: {
+          email: data.email,
+          username: data.username,
+          displayName: data.displayName,
+          country: data.country,
+          currency: data.currency,
+          workType: data.workType,
+          customWorkType: data.customWorkType,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          businessName: data.businessName,
+          businessRegNumber: data.businessRegNumber,
+          phone: data.phone,
+          address: data.address,
+          city: data.city,
+          state: data.state,
+          zipCode: data.zipCode,
+          postalCode: data.postalCode,
+          website: data.website,
+          dateFormat: data.dateFormat,
+          logoUrl: data.logoUrl,
+        },
+      })
+    )
 
     return NextResponse.json(userData)
   } catch (error) {
