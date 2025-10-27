@@ -73,15 +73,23 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
     }
   }, [userProfile?.id])
 
+  // Defer non-critical reminders: only check when chat is opened
   useEffect(() => {
-  // Check for reminders when component mounts
-    checkForReminders()
-    
-    // Set up periodic reminder checks (every 30 minutes)
-    const reminderInterval = setInterval(checkForReminders, 30 * 60 * 1000)
-    
-    return () => clearInterval(reminderInterval)
-  }, [userProfile?.id])
+    if (!isOpen) return
+    let cancelled = false
+    const run = async () => {
+      await checkForReminders()
+    }
+    run()
+    // periodic checks only when open
+    const reminderInterval = setInterval(() => {
+      if (!cancelled) checkForReminders()
+    }, 30 * 60 * 1000)
+    return () => {
+      cancelled = true
+      clearInterval(reminderInterval)
+    }
+  }, [isOpen, userProfile?.id])
 
   const loadChatHistory = async () => {
     if (!userProfile?.id) return
@@ -133,7 +141,25 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
 
   const checkForReminders = async () => {
     if (!userProfile?.id) return
-    
+    // Cache results for 15 minutes to avoid repeated calls
+    const cacheKey = `reminders-cache-${userProfile.id}`
+    const cacheTimeKey = `${cacheKey}-time`
+    const now = Date.now()
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      const cachedAt = Number(localStorage.getItem(cacheTimeKey) || 0)
+      if (cached && now - cachedAt < 15 * 60 * 1000) {
+        const data = JSON.parse(cached)
+        if (data.reminders && data.reminders.length > 0) {
+          setHasReminders(true)
+          data.reminders.forEach((reminder: any) => {
+            addMessage('system', `📢 ${reminder.title}\n\n${reminder.message}`)
+          })
+        }
+        return
+      }
+    } catch {}
+
     try {
       const response = await fetch(`/api/chatbot/reminders?userId=${userProfile.id}`)
       if (response.ok) {
@@ -145,6 +171,10 @@ export function AiChatbot({ onActionComplete }: ChatbotProps) {
           data.reminders.forEach((reminder: any) => {
             addMessage('system', `📢 ${reminder.title}\n\n${reminder.message}`)
           })
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(data))
+            localStorage.setItem(cacheTimeKey, String(now))
+          } catch {}
         }
       }
     } catch (error) {

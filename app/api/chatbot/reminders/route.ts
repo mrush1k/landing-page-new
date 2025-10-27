@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
 import { prisma } from '@/lib/prisma'
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    promise.then((v) => { clearTimeout(t); resolve(v) })
+           .catch((e) => { clearTimeout(t); reject(e) })
+  })
+}
 
 // Check for subscription renewals and create reminder messages
 export async function GET(request: NextRequest) {
@@ -16,10 +22,20 @@ export async function GET(request: NextRequest) {
       )
     }
     
+    // Non-critical: if DB isn't configured, return fast with no reminders
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ reminders: [], nextRenewalDate: null, daysUntilRenewal: null })
+    }
+    
     // Get user information for subscription status
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    })
+    const user = await withTimeout(
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { createdAt: true }
+      }),
+      1000,
+      'chatbot:reminders:user'
+    )
     
     if (!user) {
       return NextResponse.json(
@@ -73,27 +89,47 @@ export async function GET(request: NextRequest) {
       })
     }
     
-    // Check for overdue invoices that might need attention
-    const overdueInvoices = await prisma.invoice.findMany({
-      where: {
-        userId,
-        status: {
-          in: ['SENT', 'APPROVED']
+    // Kick off DB queries in parallel with short timeouts
+    const overduePromise = withTimeout(
+      prisma.invoice.findMany({
+        where: {
+          userId,
+          status: { in: ['SENT', 'APPROVED'] },
+          dueDate: { lt: now }
         },
-        dueDate: {
-          lt: now
-        }
-      },
-      include: {
-        customer: {
-          select: {
-            displayName: true
-          }
-        }
-      },
-      take: 5
-    })
+        select: {
+          id: true,
+          number: true,
+          dueDate: true,
+          customer: { select: { displayName: true } },
+        },
+        take: 5
+      }),
+      1000,
+      'chatbot:reminders:overdue'
+    )
     
+    // Overdue notifications will be added after queries resolve
+    
+    // Check for draft invoices that haven't been sent
+    const draftPromise = withTimeout(
+      prisma.invoice.findMany({
+        where: {
+          userId,
+          status: 'DRAFT',
+          createdAt: { lt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) }
+        },
+        select: { id: true },
+        take: 5
+      }),
+      1000,
+      'chatbot:reminders:drafts'
+    )
+
+    const [overdueRes, draftRes] = await Promise.allSettled([overduePromise, draftPromise])
+    const overdueInvoices = overdueRes.status === 'fulfilled' ? overdueRes.value : []
+    const draftInvoices = draftRes.status === 'fulfilled' ? draftRes.value : []
+
     if (overdueInvoices.length > 0) {
       reminders.push({
         type: 'overdue_invoices',
@@ -108,18 +144,6 @@ export async function GET(request: NextRequest) {
         ]
       })
     }
-    
-    // Check for draft invoices that haven't been sent
-    const draftInvoices = await prisma.invoice.findMany({
-      where: {
-        userId,
-        status: 'DRAFT',
-        createdAt: {
-          lt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) // Older than 7 days
-        }
-      },
-      take: 5
-    })
     
     if (draftInvoices.length > 0) {
       reminders.push({
@@ -163,18 +187,25 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Log that the reminder was acknowledged
-    await prisma.chatbotInteraction.create({
-      data: {
-        userId,
-        userMessage: `Reminder dismissed: ${reminderType}`,
-        botResponse: 'Reminder acknowledged and dismissed.',
-        action: JSON.stringify({
-          type: 'reminder_dismissed',
-          reminderType
-        })
+    // Log that the reminder was acknowledged (best-effort)
+    if (process.env.DATABASE_URL) {
+      try {
+        await withTimeout(
+          prisma.chatbotInteraction.create({
+            data: {
+              userId,
+              userMessage: `Reminder dismissed: ${reminderType}`,
+              botResponse: 'Reminder acknowledged and dismissed.',
+              action: JSON.stringify({ type: 'reminder_dismissed', reminderType })
+            }
+          }),
+          1000,
+          'chatbot:reminders:dismissLog'
+        )
+      } catch (e) {
+        console.warn('Failed to log reminder dismissal (non-fatal):', e)
       }
-    })
+    }
     
     return NextResponse.json({ success: true })
     
