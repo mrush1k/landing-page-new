@@ -31,6 +31,7 @@ export function TutorialPopup({ open, onClose, onComplete, tutorial: propTutoria
   const [currentStep, setCurrentStep] = useState(0)
   const [tutorial, setTutorial] = useState<Tutorial | null>(null)
   const [loading, setLoading] = useState(false)
+  const [hasInteracted, setHasInteracted] = useState(false)
 
   useEffect(() => {
     if (propTutorial) {
@@ -44,11 +45,14 @@ export function TutorialPopup({ open, onClose, onComplete, tutorial: propTutoria
   useEffect(() => {
     if (open) {
       setCurrentStep(0)
+      setHasInteracted(false)
     }
   }, [open])
 
   const handleNext = async () => {
     if (!tutorial || !userProfile) return
+
+    setHasInteracted(true)
 
     if (currentStep < tutorial.steps.length - 1) {
       const nextStep = currentStep + 1
@@ -78,6 +82,8 @@ export function TutorialPopup({ open, onClose, onComplete, tutorial: propTutoria
 
   const handlePrevious = async () => {
     if (!tutorial || !userProfile) return
+
+    setHasInteracted(true)
 
     if (currentStep > 0) {
       const prevStep = currentStep - 1
@@ -165,16 +171,41 @@ export function TutorialPopup({ open, onClose, onComplete, tutorial: propTutoria
         body: JSON.stringify({
           tutorialId: tutorial.id,
           currentStep: currentStep,
-          completed: true,
+          completed: true, // Mark as completed so it won't show again
           completedAt: new Date().toISOString()
         })
       })
       onClose()
     } catch (error) {
       console.error('Failed to skip tutorial:', error)
+      onClose() // Close anyway
     } finally {
       setLoading(false)
     }
+  }
+
+  // Handle closing the dialog (X button or clicking outside)
+  const handleDialogClose = async (isOpen: boolean) => {
+    if (!isOpen && tutorial && userProfile) {
+      // User is closing the tutorial - mark as dismissed so it doesn't show again
+      try {
+        await fetch('/api/tutorials/progress', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tutorialId: tutorial.id,
+            currentStep: hasInteracted ? currentStep : 0,
+            completed: true, // Mark as completed to prevent showing again
+            completedAt: new Date().toISOString()
+          })
+        })
+      } catch (error) {
+        console.error('Failed to save tutorial dismissal:', error)
+      }
+    }
+    onClose()
   }
 
   if (!tutorial) return null
@@ -184,7 +215,7 @@ export function TutorialPopup({ open, onClose, onComplete, tutorial: propTutoria
   const isLastStep = currentStep === tutorial.steps.length - 1
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleDialogClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader className="space-y-4">
           <div className="flex items-center justify-between">
@@ -194,7 +225,7 @@ export function TutorialPopup({ open, onClose, onComplete, tutorial: propTutoria
                 {tutorial.title}
               </DialogTitle>
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={() => handleDialogClose(false)}>
               <X className="w-4 h-4" />
             </Button>
           </div>

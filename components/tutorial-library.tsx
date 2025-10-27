@@ -91,6 +91,31 @@ export function TutorialLibrary({
 
   // Fetch tutorial completion status using Supabase cookie auth
   useEffect(() => {
+    // Check localStorage cache first
+    const cacheKey = 'tutorial-progress-cache'
+    const cacheTimeKey = 'tutorial-progress-cache-time'
+    const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+    
+    const cached = typeof window !== 'undefined' && localStorage.getItem(cacheKey)
+    const cacheTime = typeof window !== 'undefined' && localStorage.getItem(cacheTimeKey)
+    const now = Date.now()
+    
+    // Use cache if it's fresh (less than 5 minutes old)
+    if (cached && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+      try {
+        const completedIds = new Set<string>(JSON.parse(cached))
+        setCompletedTutorials(completedIds)
+        setTutorials(SAMPLE_TUTORIALS.map(tutorial => ({
+          ...tutorial,
+          completed: completedIds.has(tutorial.id)
+        })))
+        setLoading(false)
+        return // Use cached data, skip API calls
+      } catch (e) {
+        // Cache corrupted, fetch fresh
+      }
+    }
+
     async function fetchTutorialProgress() {
       try {
         // Fetch progress for each tutorial in parallel
@@ -117,6 +142,12 @@ export function TutorialLibrary({
           ...tutorial,
           completed: completedIds.has(tutorial.id)
         })))
+        
+        // Cache the results
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(cacheKey, JSON.stringify(Array.from(completedIds)))
+          localStorage.setItem(cacheTimeKey, now.toString())
+        }
       } catch (error) {
         console.error('Error fetching tutorial progress:', error)
       } finally {
@@ -177,6 +208,12 @@ export function TutorialLibrary({
       setTutorials(prev => prev.map(tutorial =>
         tutorial.id === tutorialId ? { ...tutorial, completed: true } : tutorial
       ))
+      
+      // Invalidate cache so next load gets fresh data
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('tutorial-progress-cache')
+        localStorage.removeItem('tutorial-progress-cache-time')
+      }
     } catch (error) {
       console.error('Error marking tutorial as complete:', error)
     }

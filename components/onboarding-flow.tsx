@@ -74,8 +74,20 @@ export function OnboardingFlow() {
 
   useEffect(() => {
     // Check if user is new and hasn't completed onboarding
+    // Use a per-user localStorage flag to avoid showing onboarding repeatedly during navigation
     if (userProfile && !userProfile.onboardingCompleted) {
-      setIsOpen(true)
+      try {
+        const key = `onboarding-shown-${userProfile.id}`
+        const alreadyShown = typeof window !== 'undefined' && localStorage.getItem(key) === 'true'
+        if (!alreadyShown) {
+          setIsOpen(true)
+          // mark as shown immediately to avoid repeated opens during the same session
+          if (typeof window !== 'undefined') localStorage.setItem(key, 'true')
+        }
+      } catch (e) {
+        // on any error, fall back to showing once
+        setIsOpen(true)
+      }
     }
   }, [userProfile])
 
@@ -96,11 +108,25 @@ export function OnboardingFlow() {
   const handleSkipOnboarding = async () => {
     // Mark onboarding as completed
     try {
-      // Use Supabase cookie-based auth instead of JWT token
-      await fetch('/api/users/onboarding-complete', {
-        method: 'POST'
-        // No Authorization header needed with Supabase cookie auth
-      })
+      // Use a local guard so we don't fire multiple identical requests
+      const key = `onboarding-shown-${userProfile?.id}`
+      if (typeof window !== 'undefined' && userProfile) {
+        const already = localStorage.getItem(key) === 'true'
+        if (already) {
+          // already recorded locally; skip network call
+        } else {
+          // mark locally first to avoid races from remounts
+          localStorage.setItem(key, 'true')
+          // Use Supabase cookie-based auth instead of JWT token
+          await fetch('/api/users/onboarding-complete', {
+            method: 'POST'
+            // No Authorization header needed with Supabase cookie auth
+          })
+        }
+      } else {
+        // Fallback: attempt network call if we don't have userProfile
+        await fetch('/api/users/onboarding-complete', { method: 'POST' })
+      }
     } catch (error) {
       console.error('Failed to mark onboarding as complete:', error)
     }
@@ -159,7 +185,7 @@ export function OnboardingFlow() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {steps[currentStep]?.tutorialCategory && (
+                {isOpen && steps[currentStep]?.tutorialCategory && (
                   <div>
                     <h4 className="font-medium mb-3">Quick Tutorial</h4>
                     <TutorialLibrary 

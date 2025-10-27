@@ -58,14 +58,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (!process.env.DATABASE_URL) {
-      // No DB configured: return sensible default (no progress)
-      return NextResponse.json({ completed: false, currentStep: 0 })
+      // No DB configured: return null to indicate no progress record exists
+      return NextResponse.json(null)
     }
 
     const dbUser = await resolveDbUser(user)
     if (!dbUser) {
-      // If no DB user, treat as no progress
-      return NextResponse.json({ completed: false, currentStep: 0 })
+      // If no DB user, return null to indicate no progress record
+      return NextResponse.json(null)
     }
 
     const userTutorial = await prisma.userTutorial.findUnique({
@@ -73,7 +73,9 @@ export async function GET(request: NextRequest) {
     })
 
     if (!userTutorial) {
-      return NextResponse.json({ completed: false, currentStep: 0 })
+      // Return null when no record exists (not an object with false values)
+      // This helps distinguish between "never seen" vs "started but not completed"
+      return NextResponse.json(null)
     }
 
     return NextResponse.json({

@@ -477,8 +477,8 @@ export default function InvoiceDetailPage() {
   }
 
   const canDeleteInvoice = (invoice: Invoice) => {
-    const deletableStatuses = [InvoiceStatus.DRAFT, InvoiceStatus.VOIDED]
-    return deletableStatuses.includes(invoice.status) && !invoice.deletedAt
+    // Allow deletion for all statuses (except already deleted). Soft-delete is used server-side.
+    return !invoice.deletedAt
   }
 
   const handleVoidInvoice = async () => {

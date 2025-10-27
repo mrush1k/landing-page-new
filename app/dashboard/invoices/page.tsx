@@ -174,21 +174,18 @@ export default function InvoicesPage() {
 
   // Show delete confirmation dialog
   const confirmDelete = (invoiceId: string) => {
+    // Allow deletion for all invoice statuses. Show a non-blocking warning message when appropriate.
     const invoice = invoices.find(inv => inv.id === invoiceId)
-    const canDeleteStatuses = ['DRAFT', 'VOIDED']
-    if (invoice && !canDeleteStatuses.includes(invoice.status)) {
-      let errorMessage = 'Cannot delete this invoice'
+    let warning: string | null = null
+    if (invoice) {
       if (['SENT', 'APPROVED', 'OVERDUE'].includes(invoice.status)) {
-        errorMessage = 'Cannot delete sent invoices. You can void the invoice instead.'
+        warning = 'This invoice has been sent or approved. Deleting will remove it from the dashboard.'
       } else if (['PAID', 'PARTIALLY_PAID'].includes(invoice.status)) {
-        errorMessage = 'Cannot delete paid invoices. Consider voiding first or creating a credit note.'
+        warning = 'This invoice has payment records. Deleting it will remove the invoice; payment records may be preserved for audit unless you choose to remove associated records.'
       }
-      setDeleteError(errorMessage)
-      setDeleteDialogOpen(true)
-      return
     }
     setInvoiceToDelete(invoiceId)
-    setDeleteError(null)
+    setDeleteError(warning)
     setDeleteConfirmWithPayments(false)
     setDeleteDialogOpen(true)
   }
@@ -642,48 +639,42 @@ export default function InvoicesPage() {
       </Card>
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {deleteError && !deleteConfirmWithPayments ? "Cannot Delete Invoice" : "Permanently Delete Invoice"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteError ? (
-                <div className="text-red-500">
-                  {deleteError}
-                </div>
-              ) : (
-                <>
-                  This action cannot be undone. This will permanently delete the invoice
-                  and remove it from our servers.
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Permanently Delete Invoice
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {deleteError ? (
+                    <div className="text-amber-700">
+                      {deleteError}
+                    </div>
+                  ) : (
+                    <div>
+                      This action cannot be undone. This will permanently delete the invoice
+                      and remove it from our dashboard.
+                    </div>
+                  )}
                   {deleteConfirmWithPayments && (
                     <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
                       <p className="font-medium text-amber-700">Warning: This invoice has payment records</p>
                       <p className="text-amber-600 text-sm mt-1">
-                        Deleting will hide the invoice but preserve payment history for audit purposes.
+                        Deleting will hide the invoice but preserve payment history for audit purposes unless you choose to remove associated records.
                       </p>
                     </div>
                   )}
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            {(deleteError && !deleteConfirmWithPayments) ? (
-              <AlertDialogAction onClick={() => setDeleteDialogOpen(false)}>
-                OK
-              </AlertDialogAction>
-            ) : (
-              <AlertDialogAction
-                onClick={handleDeleteInvoice}
-                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-              >
-                {deleteConfirmWithPayments ? "Confirm Delete" : "Delete"}
-              </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteInvoice}
+                  className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                >
+                  {deleteConfirmWithPayments ? "Confirm Delete" : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
       </AlertDialog>
     </div>
   )

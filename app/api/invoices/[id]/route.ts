@@ -171,21 +171,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // Business rules for deletion
-    const canDeleteStatuses = ['DRAFT', 'VOIDED']
-    if (!canDeleteStatuses.includes(invoice.status)) {
-      let errorMessage = 'Cannot delete this invoice'
-      
-      if (['SENT', 'APPROVED', 'OVERDUE'].includes(invoice.status)) {
-        errorMessage = 'Cannot delete sent invoices. You can void the invoice instead.'
-      } else if (['PAID', 'PARTIALLY_PAID'].includes(invoice.status)) {
-        errorMessage = 'Cannot delete paid invoices. Consider voiding first or creating a credit note.'
-      }
-      
-      return NextResponse.json({ error: errorMessage }, { status: 400 })
-    }
+    // Allow deletion for all invoice statuses. Previously only DRAFT/VOIDED were deletable.
+    // Keep soft-delete semantics and a payments-confirmation flow for safety.
 
-    // Warning if invoice has payments (even for VOIDED invoices)
+    // Warning if invoice has payments
     const hasPayments = invoice._count.payments > 0
     if (hasPayments && !requestData.confirmWithPayments) {
       return NextResponse.json({ 
@@ -194,9 +183,21 @@ export async function DELETE(
       }, { status: 400 })
     }
 
-    // Optimized: Parallel transaction operations
-    await prisma.$transaction([
-      // Soft delete the invoice
+    // If caller requests, remove associated records (payments/items) to keep DB clean.
+    // This is optional and must be explicitly requested to avoid accidental data loss.
+    const removeAssociated = !!requestData.removeAssociated
+
+    const txOps: any[] = []
+    if (removeAssociated) {
+      // Delete dependent records first to avoid FK surprises when doing physical deletes.
+      txOps.push(
+        prisma.payment.deleteMany({ where: { invoiceId: id } }),
+        prisma.invoiceItem.deleteMany({ where: { invoiceId: id } })
+      )
+    }
+
+    // Soft delete the invoice and create an audit log entry in a transaction
+    txOps.push(
       prisma.invoice.update({
         where: { id },
         data: {
@@ -206,7 +207,6 @@ export async function DELETE(
           updatedAt: new Date(),
         },
       }),
-      // Create audit log entry
       prisma.invoiceAuditLog.create({
         data: {
           invoiceId: id,
@@ -216,8 +216,10 @@ export async function DELETE(
           oldStatus: invoice.status,
           newStatus: 'DELETED',
         },
-      }),
-    ])
+      })
+    )
+
+    await prisma.$transaction(txOps)
 
     return NextResponse.json({
       message: 'Invoice deleted successfully',
