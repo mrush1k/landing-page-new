@@ -33,6 +33,7 @@ export async function GET(
         lastName: user.user_metadata?.family_name || '',
         country: 'US',
         currency: 'USD',
+        onboardingCompleted: false,
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -51,6 +52,7 @@ export async function GET(
         lastName: true,
         country: true,
         currency: true,
+        onboardingCompleted: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -67,6 +69,7 @@ export async function GET(
         lastName: user.user_metadata?.family_name || '',
         country: 'US',
         currency: 'USD',
+        onboardingCompleted: false,
         createdAt: new Date(),
         updatedAt: new Date()
       }

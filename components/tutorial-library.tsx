@@ -88,20 +88,17 @@ export function TutorialLibrary({
   const [selectedDifficulty, setSelectedDifficulty] = useState('all')
   const [completedTutorials, setCompletedTutorials] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const cacheKey = 'tutorial-progress-cache'
+  const cacheTimeKey = 'tutorial-progress-cache-time'
+  const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
   // Fetch tutorial completion status using Supabase cookie auth
   useEffect(() => {
-    // Check localStorage cache first
-    const cacheKey = 'tutorial-progress-cache'
-    const cacheTimeKey = 'tutorial-progress-cache-time'
-    const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-    
     const cached = typeof window !== 'undefined' && localStorage.getItem(cacheKey)
     const cacheTime = typeof window !== 'undefined' && localStorage.getItem(cacheTimeKey)
     const now = Date.now()
-    
-    // Use cache if it's fresh (less than 5 minutes old)
-    if (cached && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+
+    if (cached && cacheTime && now - parseInt(cacheTime, 10) < CACHE_DURATION) {
       try {
         const completedIds = new Set<string>(JSON.parse(cached))
         setCompletedTutorials(completedIds)
@@ -110,43 +107,37 @@ export function TutorialLibrary({
           completed: completedIds.has(tutorial.id)
         })))
         setLoading(false)
-        return // Use cached data, skip API calls
-      } catch (e) {
-        // Cache corrupted, fetch fresh
+        return
+      } catch (cacheError) {
+        console.warn('Failed to parse tutorial progress cache, refetching.', cacheError)
       }
     }
 
     async function fetchTutorialProgress() {
       try {
-        // Fetch progress for each tutorial in parallel
-        const responses = await Promise.all(
-          SAMPLE_TUTORIALS.map(tutorial => 
-            fetch(`/api/tutorials/progress?tutorialId=${tutorial.id}`)
-              .then(res => res.ok ? res.json() : null)
-              .catch(() => null)
-          )
-        )
-        
-        // Update completion status based on responses
+        const response = await fetch('/api/tutorials/progress')
+        if (!response.ok) {
+          throw new Error(`Failed to load tutorial progress: ${response.status}`)
+        }
+
+        const raw = await response.json()
+        const progress: Array<{ tutorialId: string; completed: boolean }> = Array.isArray(raw) ? raw : []
         const completedIds = new Set<string>()
-        responses.forEach((res, index) => {
-          if (res && res.completed) {
-            completedIds.add(SAMPLE_TUTORIALS[index].id)
+        progress.forEach((entry) => {
+          if (entry.completed) {
+            completedIds.add(entry.tutorialId)
           }
         })
-        
+
         setCompletedTutorials(completedIds)
-        
-        // Update tutorial list with completion status
         setTutorials(SAMPLE_TUTORIALS.map(tutorial => ({
           ...tutorial,
           completed: completedIds.has(tutorial.id)
         })))
-        
-        // Cache the results
+
         if (typeof window !== 'undefined') {
           localStorage.setItem(cacheKey, JSON.stringify(Array.from(completedIds)))
-          localStorage.setItem(cacheTimeKey, now.toString())
+          localStorage.setItem(cacheTimeKey, Date.now().toString())
         }
       } catch (error) {
         console.error('Error fetching tutorial progress:', error)

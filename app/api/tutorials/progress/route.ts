@@ -42,6 +42,19 @@ async function resolveDbUser(supabaseUser: any) {
   return dbUser
 }
 
+function serializeUserTutorial(userTutorial: any) {
+  return {
+    id: userTutorial.id,
+    userId: userTutorial.userId,
+    tutorialId: userTutorial.tutorialId,
+    completed: userTutorial.completed,
+    currentStep: userTutorial.currentStep,
+    completedAt: userTutorial.completedAt,
+    createdAt: userTutorial.createdAt,
+    updatedAt: userTutorial.updatedAt,
+  }
+}
+
 // GET /api/tutorials/progress?tutorialId=...
 export async function GET(request: NextRequest) {
   try {
@@ -53,19 +66,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const tutorialId = searchParams.get('tutorialId')
 
-    if (!tutorialId) {
-      return NextResponse.json({ error: 'Missing tutorialId' }, { status: 400 })
-    }
-
     if (!process.env.DATABASE_URL) {
-      // No DB configured: return null to indicate no progress record exists
-      return NextResponse.json(null)
+      // No DB configured: return null for single lookup or empty array for aggregated fetch
+      if (tutorialId) {
+        return NextResponse.json(null)
+      }
+      return NextResponse.json([])
     }
 
     const dbUser = await resolveDbUser(user)
     if (!dbUser) {
-      // If no DB user, return null to indicate no progress record
-      return NextResponse.json(null)
+      if (tutorialId) {
+        return NextResponse.json(null)
+      }
+      return NextResponse.json([])
+    }
+
+    if (!tutorialId) {
+      const userTutorials = await prisma.userTutorial.findMany({
+        where: { userId: dbUser.id },
+      })
+
+      return NextResponse.json(userTutorials.map(serializeUserTutorial))
     }
 
     const userTutorial = await prisma.userTutorial.findUnique({
@@ -78,16 +100,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(null)
     }
 
-    return NextResponse.json({
-      id: userTutorial.id,
-      userId: userTutorial.userId,
-      tutorialId: userTutorial.tutorialId,
-      completed: userTutorial.completed,
-      currentStep: userTutorial.currentStep,
-      completedAt: userTutorial.completedAt,
-      createdAt: userTutorial.createdAt,
-      updatedAt: userTutorial.updatedAt,
-    })
+    return NextResponse.json(serializeUserTutorial(userTutorial))
   } catch (error) {
     console.error('Error fetching tutorial progress:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

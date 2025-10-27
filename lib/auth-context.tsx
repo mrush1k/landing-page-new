@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             lastName: session.user.user_metadata?.family_name || '',
             country: 'US',
             currency: 'USD',
+            onboardingCompleted: false,
             createdAt: new Date(),
             updatedAt: new Date()
           }
@@ -107,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             lastName: session.user.user_metadata?.family_name || '',
             country: 'US',
             currency: 'USD',
+            onboardingCompleted: false,
             createdAt: new Date(),
             updatedAt: new Date()
           }

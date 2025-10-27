@@ -51,13 +51,14 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        // Get tutorial progress using Supabase cookie auth
-        const response = await fetch(`/api/tutorials/progress?tutorialId=${tutorial.id}`)
+        // Get tutorial progress using Supabase cookie auth (single aggregated call)
+        const response = await fetch('/api/tutorials/progress')
         let progress: TutorialProgress | null = null
         if (response.ok) {
           const data = await response.json()
-          // API returns null when no record exists
-          progress = data
+          if (Array.isArray(data)) {
+            progress = data.find((entry: TutorialProgress) => entry.tutorialId === tutorial.id) ?? null
+          }
         }
         
         // Mark as checked IMMEDIATELY to prevent re-checking on navigation

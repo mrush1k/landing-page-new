@@ -515,14 +515,18 @@ export async function saveUserTutorial(tutorialId: string, currentStep: number, 
 // Get user tutorial progress
 export async function getUserTutorial(tutorialId: string): Promise<UserTutorial | null> {
   try {
-    const response = await fetch(`/api/tutorials/progress?tutorialId=${tutorialId}`)
-    
+    const response = await fetch('/api/tutorials/progress')
+
     if (!response.ok) {
       if (response.status === 404) return null
       throw new Error('Failed to fetch tutorial progress')
     }
-    
-    return response.json()
+
+    const data = await response.json()
+    const tutorials: UserTutorial[] = Array.isArray(data) ? data : []
+
+    const entry = tutorials.find((item) => item.tutorialId === tutorialId)
+    return entry || null
   } catch (error) {
     console.error('Error fetching tutorial progress:', error)
     return null

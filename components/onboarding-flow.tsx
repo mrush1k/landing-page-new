@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Progress } from './ui/progress'
@@ -22,7 +22,7 @@ interface OnboardingStep {
 }
 
 export function OnboardingFlow() {
-  const { userProfile } = useAuth()
+  const { userProfile, updateUser } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [steps, setSteps] = useState<OnboardingStep[]>([
@@ -71,6 +71,7 @@ export function OnboardingFlow() {
       tutorialCategory: 'payments'
     }
   ])
+  const hasSubmittedRef = useRef(false)
 
   useEffect(() => {
     // Check if user is new and hasn't completed onboarding
@@ -108,13 +109,16 @@ export function OnboardingFlow() {
   const handleSkipOnboarding = async () => {
     // Mark onboarding as completed
     try {
+      if (hasSubmittedRef.current) {
+        setIsOpen(false)
+        return
+      }
+
       // Use a local guard so we don't fire multiple identical requests
       const key = `onboarding-shown-${userProfile?.id}`
       if (typeof window !== 'undefined' && userProfile) {
         const already = localStorage.getItem(key) === 'true'
-        if (already) {
-          // already recorded locally; skip network call
-        } else {
+        if (!already) {
           // mark locally first to avoid races from remounts
           localStorage.setItem(key, 'true')
           // Use Supabase cookie-based auth instead of JWT token
@@ -123,12 +127,18 @@ export function OnboardingFlow() {
             // No Authorization header needed with Supabase cookie auth
           })
         }
+        hasSubmittedRef.current = true
+        updateUser({ ...userProfile, onboardingCompleted: true })
       } else {
+        hasSubmittedRef.current = true
         // Fallback: attempt network call if we don't have userProfile
         await fetch('/api/users/onboarding-complete', { method: 'POST' })
       }
     } catch (error) {
       console.error('Failed to mark onboarding as complete:', error)
+    }
+    if (userProfile) {
+      updateUser({ ...userProfile, onboardingCompleted: true })
     }
     setIsOpen(false)
   }
