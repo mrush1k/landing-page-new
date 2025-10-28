@@ -429,7 +429,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;lin
 .client-info,.invoice-dates{flex:1}
 .client-info{margin-right:30px}
 .section-title{font-size:13px;font-weight:bold;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px}
-.client-details,.date-details{font-size:12px;color:#666;line-height:1.4}
+.client-details{font-size:12px;color:#666;line-height:1.4}
+.invoice-dates{flex:1;display:flex;flex-direction:column;align-items:flex-end}
+.invoice-dates .section-title{text-align:left;align-self:flex-end;margin-right:0}
+.date-details{font-size:12px;color:#666;line-height:1.8;display:flex;flex-direction:column;align-items:flex-end}
+.date-row{display:flex;justify-content:flex-end;gap:15px;width:245px}
+.date-label{font-weight:bold;font-size:11px;text-transform:uppercase;color:#666;letter-spacing:0.3px;width:110px;text-align:left}
+.date-value{font-size:12px;color:#333;text-align:right;width:130px}
 .items{width:100%;border-collapse:collapse;margin-bottom:30px;border-radius:6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
 .items th{background:#f8f9fa;color:#333;font-weight:bold;padding:12px 10px;text-align:left;border-bottom:1px solid #dee2e6;font-size:12px;text-transform:uppercase;letter-spacing:0.3px}
 .items td{padding:12px 10px;border-bottom:1px solid #f1f3f4;font-size:12px}
@@ -476,9 +482,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;lin
   <div class="invoice-dates">
     <div class="section-title">Invoice Details</div>
     <div class="date-details">
-      <strong>Issue Date:</strong> ${formatDate(issueDate)}<br>
-      <strong>Due Date:</strong> ${formatDate(dueDate)}<br>
-      <strong>Payment Terms:</strong> ${paymentTerms}
+      <div class="date-row">
+        <div class="date-label">Issue Date</div>
+        <div class="date-value">${formatDate(issueDate)}</div>
+      </div>
+      <div class="date-row">
+        <div class="date-label">Due Date</div>
+        <div class="date-value">${formatDate(dueDate)}</div>
+      </div>
+      <div class="date-row">
+        <div class="date-label">Payment Terms</div>
+        <div class="date-value">${paymentTerms}</div>
+      </div>
     </div>
   </div>
 </div>
