@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
+import { useFetchOnce } from '@/hooks/use-fetch-once'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -29,13 +30,8 @@ export default function EstimatesPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
 
-  useEffect(() => {
-    if (user) {
-      fetchEstimates()
-    }
-  }, [user])
-
-  const fetchEstimates = async () => {
+  const fetchEstimates = useCallback(async () => {
+    if (!user) return
     try {
       const response = await fetch('/api/estimates', {
         headers: {
@@ -52,7 +48,9 @@ export default function EstimatesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useFetchOnce(fetchEstimates, [fetchEstimates])
 
   const getEstimateStatus = (estimate: Estimate) => {
     if (estimate.status === EstimateStatus.CONVERTED) {

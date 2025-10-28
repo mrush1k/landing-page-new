@@ -3,33 +3,29 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { Loader2 } from 'lucide-react'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
 }
 
+/**
+ * Optimized Protected Route - Relies on middleware auth check
+ * No loading spinner needed as middleware already validates session
+ * This component just handles the redirect for client-side navigation
+ */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Only redirect once loading is complete AND there's no user
+    // Don't redirect during initial load to avoid false positives
+    if (!loading && user === null) {
       router.push('/login')
     }
   }, [user, loading, router])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
-  if (!user) {
-    return null
-  }
-
+  // Render immediately - middleware already verified auth on server
+  // The useEffect will handle any edge cases for client-side navigation
   return <>{children}</>
 }

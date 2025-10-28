@@ -21,9 +21,9 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
 }
 
-// Only add listeners once to prevent memory leaks
+// Only add listeners once to prevent memory leaks (Node.js only)
 let listenersAdded = false
-if (!listenersAdded) {
+if (!listenersAdded && typeof process !== 'undefined' && typeof process.setMaxListeners === 'function') {
   // Increase max listeners to prevent warnings
   process.setMaxListeners(15)
   

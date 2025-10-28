@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
-import { generateInvoicePDF } from '@/lib/pdf-generator'
+import { generateInvoicePDF } from '@/lib/pdf-generator-fast'
 
 export async function GET(
   request: NextRequest,
@@ -68,20 +68,28 @@ export async function GET(
       })) || []
     }
 
-    // Generate PDF
-    const pdf = generateInvoicePDF(invoiceForPDF as any, userProfile as any)
-    const pdfBuffer = pdf.output('arraybuffer')
+    // Generate PDF using production Puppeteer-based generator
+    const businessInfo = {
+      name: userProfile.businessName || userProfile.displayName || undefined,
+      address: [userProfile.address, userProfile.city, userProfile.state, userProfile.zipCode, userProfile.country].filter(Boolean).join(', ') || undefined,
+      phone: userProfile.phone || undefined,
+      email: userProfile.email || undefined,
+      logo: userProfile.logoUrl || userProfile.aiLogoUrl || undefined,
+      taxId: userProfile.businessRegNumber || undefined
+    }
+    
+    const pdfBuffer = await generateInvoicePDF(invoiceForPDF as any, businessInfo)
 
     // Log the PDF generation for tracking
     console.log(`Invoice PDF generated for ${invoice.number} by user ${user.id}`)
 
     // Return PDF as response
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="Invoice-${invoice.number}.pdf"`,
-        'Content-Length': pdfBuffer.byteLength.toString(),
+        'Content-Length': pdfBuffer.length.toString(),
       },
     })
 

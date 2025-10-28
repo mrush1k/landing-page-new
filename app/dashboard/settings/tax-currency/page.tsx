@@ -22,7 +22,7 @@ const countries = [
 const currencies = ['USD', 'AUD', 'NZD', 'GBP', 'CAD', 'EUR']
 
 export default function TaxCurrencySettingsPage() {
-  const { userProfile: user, updateUser } = useAuth()
+  const { userProfile: user, updateUserProfile } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
@@ -63,7 +63,7 @@ export default function TaxCurrencySettingsPage() {
 
       if (response.ok) {
         const updatedUser = await response.json()
-        updateUser(updatedUser)
+        updateUserProfile(updatedUser)
         toast({
           title: "Tax & Currency Settings Updated",
           description: "Your tax and currency settings have been updated successfully."

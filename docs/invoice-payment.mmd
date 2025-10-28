@@ -1,0 +1,33 @@
+sequenceDiagram
+  participant User
+  participant Frontend as Browser(UI)
+  participant SupabaseClient as Supabase(Client)
+  participant API as NextAPI
+  participant SupabaseServer as Supabase(Server)
+  participant Prisma as DB
+  participant Email as SMTP
+
+  User->>Frontend: Open payment modal -> submit payment
+  Frontend->>SupabaseClient: getAuthHeaders()
+  SupabaseClient-->>Frontend: access_token
+  Frontend->>API: POST /api/invoices/:id/payments { amount, paymentDate, method }
+
+  API->>SupabaseServer: supabase.auth.getUser()
+  SupabaseServer-->>API: supabase user
+  API->>Prisma: prisma.invoice.findUnique({ include: payments })
+  Prisma-->>API: invoice + payments
+
+  API->>Prisma: prisma.payment.create({ invoiceId, amount, paymentDate, method })
+  Prisma-->>API: payment record
+
+  API->>Prisma: (compute totals) optional prisma.invoice.update({ status: newStatus })
+  Prisma-->>API: invoice updated
+
+  API->>Prisma: prisma.invoice.findUnique({ include: customer, items, payments })
+  Prisma-->>API: updated invoice
+  API-->>Frontend: 200 updated invoice
+
+  alt newStatus == PAID and customer.email exists
+    API->>Email: sendReceiptEmail(updatedInvoice, payment)
+    Email-->>API: send result (errors logged)
+  end

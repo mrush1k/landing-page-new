@@ -1,133 +1,106 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-import { createClient } from '@/utils/supabase/server'
-
+import { GET as createGET, PUT as createPUT, DELETE as createDELETE } from '@/lib/api-handler'
+import { dbOperation, serializeInvoice } from '@/lib/db-operations'
+import { CacheConfigs } from '@/lib/api-cache'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(
-  request: NextRequest,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  try {
-    // Get user from Supabase auth using server client
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const customer = await prisma.customer.findUnique({
-      where: { 
-        id,
-        userId: user.id // Ensure user owns this customer
-      },
-      include: {
-        invoices: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    })
-
-    if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
+  
+  return createGET(
+    async ({ dbUser }) => {
+      const customer = await dbOperation(
+        () => prisma.customer.findFirst({
+          where: { 
+            id,
+            userId: dbUser!.id
+          },
+          include: {
+            invoices: {
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        }),
+        { operationName: 'Fetch customer' }
       )
-    }
 
-    return NextResponse.json(customer)
-  } catch (error) {
-    console.error('Error fetching customer:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch customer' },
-      { status: 500 }
-    )
-  }
+      if (!customer) {
+        throw Object.assign(new Error('Customer not found'), { statusCode: 404 })
+      }
+
+      return {
+        ...customer,
+        invoices: customer.invoices?.map(serializeInvoice)
+      }
+    },
+    { cache: CacheConfigs.USER_DATA }
+  )(request as any)
 }
 
 export async function PUT(
-  request: NextRequest,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  try {
-    // Get user from Supabase auth using server client
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
+  
+  return createPUT(
+    async ({ dbUser, request }) => {
+      const data = await request.json()
 
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      if (!data.displayName || data.displayName.trim() === '') {
+        throw Object.assign(new Error('Display name is required'), { statusCode: 400 })
+      }
+
+      const customer = await dbOperation(
+        () => prisma.customer.update({
+          where: { 
+            id,
+            userId: dbUser!.id
+          },
+          data: {
+            displayName: data.displayName.trim(),
+            firstName: data.firstName?.trim() || null,
+            lastName: data.lastName?.trim() || null,
+            businessName: data.businessName?.trim() || null,
+            email: data.email?.trim() || null,
+            phone: data.phone?.trim() || null,
+            address: data.address?.trim() || null,
+            city: data.city?.trim() || null,
+            state: data.state?.trim() || null,
+            zipCode: data.zipCode?.trim() || null,
+            country: data.country?.trim() || null,
+            businessRegNumber: data.businessRegNumber?.trim() || null,
+          },
+        }),
+        { operationName: 'Update customer' }
+      )
+
+      return customer
     }
-
-    const data = await request.json()
-
-    // Validate required fields
-    if (!data.displayName || data.displayName.trim() === '') {
-      return NextResponse.json({ 
-        error: 'Display name is required'
-      }, { status: 400 })
-    }
-
-    const customer = await prisma.customer.update({
-      where: { 
-        id,
-        userId: user.id // Ensure user owns this customer
-      },
-      data: {
-        displayName: data.displayName.trim(),
-        firstName: data.firstName?.trim() || null,
-        lastName: data.lastName?.trim() || null,
-        businessName: data.businessName?.trim() || null,
-        email: data.email?.trim() || null,
-        phone: data.phone?.trim() || null,
-        address: data.address?.trim() || null,
-        city: data.city?.trim() || null,
-        state: data.state?.trim() || null,
-        zipCode: data.zipCode?.trim() || null,
-        country: data.country?.trim() || null,
-        businessRegNumber: data.businessRegNumber?.trim() || null,
-      },
-    })
-
-    return NextResponse.json(customer)
-  } catch (error) {
-    console.error('Error updating customer:', error)
-    return NextResponse.json(
-      { error: 'Failed to update customer' },
-      { status: 500 }
-    )
-  }
+  )(request as any)
 }
 
 export async function DELETE(
-  request: NextRequest,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  try {
-    // Get user from Supabase auth using server client
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
+  
+  return createDELETE(
+    async ({ dbUser }) => {
+      await dbOperation(
+        () => prisma.customer.delete({
+          where: { 
+            id,
+            userId: dbUser!.id
+          },
+        }),
+        { operationName: 'Delete customer' }
+      )
 
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return { success: true }
     }
-
-    await prisma.customer.delete({
-      where: { 
-        id,
-        userId: user.id // Ensure user owns this customer
-      },
-    })
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Error deleting customer:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete customer' },
-      { status: 500 }
-    )
-  }
+  )(request as any)
 }

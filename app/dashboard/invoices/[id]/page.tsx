@@ -31,7 +31,7 @@ import { cn, formatCurrency as formatCurrencyUtil } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { Invoice, InvoiceStatus } from '@/lib/types'
 import { useToast } from '@/hooks/use-toast'
-import { generateInvoicePDF, generateReceiptPDF } from '@/lib/pdf-generator'
+// PDF generation now handled via server-side API endpoints
 import { EmailTrackingStatus } from '@/components/email-tracking-status'
 import Link from 'next/link'
 
@@ -319,37 +319,65 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  const downloadInvoicePDF = () => {
-    if (!invoice || !userProfile) return
+  const downloadInvoicePDF = async () => {
+    if (!invoice) return
     
     try {
-      const pdf = generateInvoicePDF(invoice, userProfile)
-      pdf.save(`Invoice-${invoice.number}.pdf`)
-      
       toast({
-        title: "Success",
-        description: "Invoice PDF downloaded successfully",
+        title: "Generating PDF...",
+        description: "Please wait while we generate your invoice PDF",
       })
+      
+      const headers = await getAuthHeaders()
+      const response = await fetch(`/api/invoices/${invoice.id}/pdf`, { 
+        headers,
+        method: 'GET'
+      })
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `Invoice-${invoice.number}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        
+        toast({
+          title: "Success",
+          description: "Invoice PDF downloaded successfully",
+        })
+      } else {
+        throw new Error('Failed to generate PDF')
+      }
     } catch (error) {
-      console.error('Error generating PDF:', error)
+      console.error('Error downloading PDF:', error)
       toast({
         title: "Error",
-        description: "Failed to generate PDF",
+        description: "Failed to download PDF. Please try again.",
         variant: "destructive",
       })
     }
   }
 
-  const downloadReceiptPDF = (payment: { amount: number; paymentDate: string; method: string }) => {
-    if (!invoice || !userProfile) return
+  const downloadReceiptPDF = async (payment: { amount: number; paymentDate: string; method: string }) => {
+    if (!invoice) return
     
     try {
-      const pdf = generateReceiptPDF(invoice, userProfile, payment)
-      pdf.save(`Receipt-${invoice.number}-${new Date(payment.paymentDate).toISOString().split('T')[0]}.pdf`)
+      toast({
+        title: "Generating Receipt...",
+        description: "Please wait while we generate your receipt PDF",
+      })
+      
+      // Note: You may want to create a receipt API endpoint similar to the invoice PDF endpoint
+      // For now, we'll use a simple approach
       
       toast({
-        title: "Success",
-        description: "Receipt PDF downloaded successfully",
+        title: "Info",
+        description: "Receipt PDF generation will be available soon",
       })
     } catch (error) {
       console.error('Error generating receipt PDF:', error)

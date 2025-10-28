@@ -1,0 +1,27 @@
+sequenceDiagram
+  participant User
+  participant Frontend as Browser(UI)
+  participant SupabaseClient as Supabase(Client)
+  participant API as NextAPI
+  participant SupabaseServer as Supabase(Server)
+  participant Prisma as DB
+
+  User->>Frontend: Fill invoice form -> click Save
+  Frontend->>SupabaseClient: getAuthHeaders() (supabase.auth.getSession)
+  SupabaseClient-->>Frontend: access_token
+  Frontend->>API: POST /api/invoices (headers + invoice payload)
+
+  API->>SupabaseServer: createClient(); supabase.auth.getUser() (verify token/cookies)
+  SupabaseServer-->>API: supabase user
+  API->>Prisma: prisma.user.findUnique({id})
+  alt DB user exists
+    Prisma-->>API: return user
+  else no DB user
+    API->>Prisma: prisma.user.create(...)
+    Prisma-->>API: created user
+  end
+
+  API->>Prisma: prisma.invoice.create({ invoice + items })
+  Prisma-->>API: created invoice (with items)
+  API-->>Frontend: 201 created (serialized invoice)
+  Frontend->>User: navigate to invoice detail / show success

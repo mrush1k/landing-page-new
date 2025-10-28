@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast'
 import SettingsCard from '@/components/settings/SettingsCard'
 
 export default function InvoiceAppearanceSettingsPage() {
-  const { userProfile: user, updateUser } = useAuth()
+  const { userProfile: user, updateUserProfile } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
@@ -39,20 +39,20 @@ export default function InvoiceAppearanceSettingsPage() {
       const response = await fetch(`/api/users/${user?.id}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           invoiceTemplate: invoiceAppearanceData.invoiceTemplate,
           invoiceColorScheme: invoiceAppearanceData.invoiceColorScheme,
           alwaysCcSelf: invoiceAppearanceData.alwaysCcSelf,
           defaultPaymentInstructions: invoiceAppearanceData.defaultPaymentInstructions || null
-        })
+        }),
+        credentials: 'include'
       })
 
       if (response.ok) {
         const updatedUser = await response.json()
-        updateUser(updatedUser)
+        updateUserProfile(updatedUser)
         toast({
           title: "Invoice Appearance Updated",
           description: "Your invoice appearance settings have been updated successfully."

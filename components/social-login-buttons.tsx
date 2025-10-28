@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from './ui/button'
 import { Icons } from './ui/icons'
 import { useToast } from '@/hooks/use-toast'
-import { createClient } from '@/utils/supabase/client'
+import { signInWithOAuth, type OAuthProvider } from '@/lib/oauth-unified'
 
 interface SocialLoginButtonsProps {
   isSignUp?: boolean
@@ -19,37 +19,28 @@ export function SocialLoginButtons({
   onSuccess, 
   disabled = false 
 }: SocialLoginButtonsProps) {
-  const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
+  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null)
   const { toast } = useToast()
-  const supabase = createClient()
 
-  const handleSocialLogin = async (provider: 'google' | 'microsoft' | 'apple') => {
+  const handleSocialLogin = async (provider: OAuthProvider) => {
     if (disabled) return
     
     setLoadingProvider(provider)
     
     try {
-      // Map provider names to Supabase provider names
-      const providerMap = {
-        'google': 'google' as const,
-        'microsoft': 'azure' as const, // Microsoft is 'azure' in Supabase
-        'apple': 'apple' as const,
-      }
-
-      // Use Supabase OAuth with simple implicit method
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: providerMap[provider],
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-        },
+      const { url, error } = await signInWithOAuth({
+        provider,
+        redirectTo: '/dashboard',
       })
 
       if (error) {
         throw error
       }
       
-      // The user will be redirected to the OAuth provider
-      // So we don't need to handle success here - it's handled in the callback
+      // Redirect to OAuth provider
+      if (url) {
+        window.location.href = url
+      }
       
     } catch (error) {
       console.error(`${provider} authentication error:`, error)
@@ -63,10 +54,11 @@ export function SocialLoginButtons({
   }
 
   const getButtonText = (provider: string) => {
+    const formattedProvider = provider.charAt(0).toUpperCase() + provider.slice(1)
     if (isTrial) {
-      return `Start Free Trial with ${provider}`
+      return `Start Free Trial with ${formattedProvider}`
     }
-    return isSignUp ? `Sign up with ${provider}` : `Sign in with ${provider}`
+    return isSignUp ? `Sign up with ${formattedProvider}` : `Sign in with ${formattedProvider}`
   }
 
   return (
@@ -124,32 +116,26 @@ export function SocialLoginCompact({
   onSuccess, 
   disabled = false 
 }: Pick<SocialLoginButtonsProps, 'onSuccess' | 'disabled'>) {
-  const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
+  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null)
   const { toast } = useToast()
-  const supabase = createClient()
 
-  const handleSocialLogin = async (provider: 'google' | 'microsoft' | 'apple') => {
+  const handleSocialLogin = async (provider: OAuthProvider) => {
     if (disabled) return
     
     setLoadingProvider(provider)
     
     try {
-      // Map provider names to Supabase provider names
-      const providerMap = {
-        'google': 'google' as const,
-        'microsoft': 'azure' as const, // Microsoft is 'azure' in Supabase
-        'apple': 'apple' as const,
-      }
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: providerMap[provider],
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${window.location.pathname}`,
-        },
+      const { url, error } = await signInWithOAuth({
+        provider,
+        redirectTo: window.location.pathname,
       })
 
       if (error) {
         throw error
+      }
+
+      if (url) {
+        window.location.href = url
       }
       
     } catch (error) {

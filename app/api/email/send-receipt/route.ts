@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import nodemailer from 'nodemailer'
-import { generateReceiptPDF } from '@/lib/pdf-generator'
+import { generateReceiptPDF } from '@/lib/pdf-generator-fast'
 
 export async function POST(request: NextRequest) {
   try {

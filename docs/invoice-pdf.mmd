@@ -1,0 +1,29 @@
+sequenceDiagram
+  participant User
+  participant Frontend as Browser(UI)
+  participant SupabaseClient as Supabase(Client)
+  participant API as NextAPI
+  participant SupabaseServer as Supabase(Server)
+  participant Prisma as DB
+  participant PDF as PDFGenerator
+  participant Storage as ExternalImageHost
+
+  User->>Frontend: Click Download PDF
+  Frontend->>SupabaseClient: getAuthHeaders()
+  SupabaseClient-->>Frontend: access_token
+  Frontend->>API: GET /api/invoices/:id/pdf
+
+  API->>SupabaseServer: supabase.auth.getUser()
+  SupabaseServer-->>API: supabase user
+  API->>Prisma: prisma.invoice.findUnique({ include: customer, items })
+  Prisma-->>API: invoice
+  API->>Prisma: prisma.user.findUnique({ id })
+  Prisma-->>API: userProfile
+
+  API->>PDF: generateInvoicePDF(invoiceForPDF, userProfile)
+  Note over PDF,Storage: PDF generator may load remote logo images (HTTP GET)
+  Storage-->>PDF: image bytes (if logoUrl points to remote host)
+  PDF-->>API: PDF buffer
+
+  API-->>Frontend: 200 application/pdf (arraybuffer)
+  Frontend->>User: start download

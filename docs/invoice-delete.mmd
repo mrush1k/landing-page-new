@@ -1,0 +1,28 @@
+sequenceDiagram
+  participant User
+  participant Frontend as Browser(UI)
+  participant SupabaseClient as Supabase(Client)
+  participant API as NextAPI
+  participant SupabaseServer as Supabase(Server)
+  participant Prisma as DB
+
+  User->>Frontend: Click Delete
+  Frontend->>SupabaseClient: getAuthHeaders()
+  SupabaseClient-->>Frontend: access_token
+  Frontend->>API: DELETE /api/invoices/:id { confirmWithPayments?, removeAssociated?, reason }
+
+  API->>SupabaseServer: supabase.auth.getUser()
+  SupabaseServer-->>API: supabase user
+  API->>Prisma: prisma.invoice.findFirst({ where: { id, userId, deletedAt:null }, select: { id, status, _count: { payments } } })
+  Prisma-->>API: invoice summary
+
+  alt invoice has payments and confirmWithPayments not true
+    API-->>Frontend: 400 { requiresConfirmation: true }
+    Frontend->>User: show warning & ask confirm
+    return
+  end
+
+  API->>Prisma: prisma.$transaction([ optional deleteMany(payments), optional deleteMany(items), update invoice set deletedAt, create audit log ])
+  Prisma-->>API: transaction result
+  API-->>Frontend: 200 success
+  Frontend->>User: show deleted message, remove from UI

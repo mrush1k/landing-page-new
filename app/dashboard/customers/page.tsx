@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
+import { useFetchOnce } from '@/hooks/use-fetch-once'
 import { Customer, COUNTRIES } from '@/lib/types'
 import { Plus, Edit, Trash2, User, Building } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -50,13 +51,8 @@ export default function CustomersPage() {
     businessRegNumber: '',
   })
 
-  useEffect(() => {
-    if (user) {
-      fetchCustomers()
-    }
-  }, [user])
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
+    if (!user) return
     try {
       const headers = await getAuthHeaders()
       const response = await fetch('/api/customers', { headers })
@@ -69,7 +65,9 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, getAuthHeaders])
+
+  useFetchOnce(fetchCustomers, [fetchCustomers])
 
   const resetForm = () => {
     setFormData({

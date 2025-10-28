@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { Alert, AlertDescription } from './ui/alert'
-import { Switch } from './ui/switch'
+import { Switch } from '@/components/ui/switch'
 import { Label } from './ui/label'
 import { QrCode, Smartphone, CreditCard, Zap, ExternalLink, AlertCircle } from 'lucide-react'
 

@@ -6,6 +6,11 @@ import { AuthProvider } from '@/lib/auth-context';
 import { DiagnosticProvider } from '@/components/diagnostic-provider';
 import { Toaster } from '@/components/ui/toaster';
 
+// Auto-initialize PDF generator for instant performance
+if (typeof window === 'undefined') {
+  import('@/lib/pdf-auto-init').catch(console.error)
+}
+
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {

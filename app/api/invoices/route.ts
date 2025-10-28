@@ -1,208 +1,99 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-import { createClient } from '@/utils/supabase/server'
+import { GET as createGET, POST as createPOST } from '@/lib/api-handler'
+import { dbOperation, QueryBuilders, serializeInvoice } from '@/lib/db-operations'
+import { CacheConfigs } from '@/lib/api-cache'
+import { prisma } from '@/lib/prisma'
 
-import { prisma, withRetry } from '@/lib/prisma'
-
-// Helper: resolve database user (try id -> fallback to email)
-async function resolveDbUser(supabaseUser: any) {
-  if (!supabaseUser) return null
-  let dbUser = await prisma.user.findUnique({ where: { id: supabaseUser.id } })
-  if (!dbUser && supabaseUser.email) {
-    dbUser = await prisma.user.findUnique({ where: { email: supabaseUser.email } })
-  }
-  return dbUser
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    // Get user from Supabase auth using server client
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // If no DATABASE_URL is configured, return empty invoices array
-    if (!process.env.DATABASE_URL) {
-      console.warn('Returning empty invoices list - DATABASE_URL not configured')
-      return NextResponse.json([])
-    }
-
-    const dbUser = await resolveDbUser(user)
-    if (!dbUser) {
-      // No DB user found - behaves as no invoices
-      return NextResponse.json([])
-    }
-
-    // Get pagination params from query
+export const GET = createGET(
+  async ({ dbUser, request }) => {
+    // Pagination
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 50)
+    const offset = parseInt(searchParams.get('offset') || '0') || 0
 
-    // Add cache headers for better performance  
-    const headers = new Headers({
-      'Cache-Control': 'private, max-age=180, stale-while-revalidate=60',
-      'Content-Type': 'application/json'
-    })
-
-    // Optimized query with selective field fetching, pagination and retry logic
-    const invoices = await withRetry(() =>
-      prisma.invoice.findMany({
-        where: {
-          userId: dbUser.id,
-          deletedAt: null, // Only show non-deleted invoices
+    const invoices = await dbOperation(
+      () => prisma.invoice.findMany({
+        ...QueryBuilders.userScoped(prisma.invoice, dbUser!.id),
+        include: {
+          customer: { select: { id: true, displayName: true, email: true } }
         },
-        select: {
-        id: true,
-        number: true,
-        status: true,
-        issueDate: true,
-        dueDate: true,
-        currency: true,
-        subtotal: true,
-        taxAmount: true,
-        total: true,
-        createdAt: true,
-        updatedAt: true,
-        customer: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-          },
-        },
-        // Use count instead of loading full arrays
-        _count: {
-          select: {
-            items: true,
-            payments: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    })
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset
+      }),
+      { operationName: 'Fetch invoices' }
     )
 
-    // Convert Decimal to number for JSON serialization
-    const serializedInvoices = invoices.map(invoice => ({
-      ...invoice,
-      subtotal: Number(invoice.subtotal),
-      taxAmount: Number(invoice.taxAmount),
-      total: Number(invoice.total),
-    }))
+    return invoices.map(serializeInvoice)
+  },
+  { cache: CacheConfigs.USER_DATA }
+)
 
-    return NextResponse.json(serializedInvoices, { headers })
-  } catch (error) {
-    console.error('Error fetching invoices:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch invoices' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    // Get user from Supabase auth using server client
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
+export const POST = createPOST(
+  async ({ dbUser, request }) => {
     const data = await request.json()
 
-    // Calculate totals
-    const subtotal = data.items.reduce(
-      (sum: number, item: any) => sum + (item.quantity * item.unitPrice),
-      0
-    )
-    const total = subtotal + (data.taxAmount || 0)
+    if (!data.items || data.items.length === 0) {
+      throw Object.assign(new Error('Invoice must have at least one item'), { statusCode: 400 })
+    }
 
-    const dbUser = await resolveDbUser(user)
-    if (!dbUser) {
-      // Try to create a DB user to attach invoices to (handle OAuth flows)
-      try {
-        await prisma.user.create({
-          data: {
-            id: user.id,
-            email: user.email || '',
-            username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
-            country: 'US',
-            currency: 'USD',
-            displayName: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-          },
-        })
-      } catch (e) {
-        // ignore unique errors
+    const subtotal = data.items.reduce((sum: number, item: any) => {
+      const qty = Number(item.quantity) || 0
+      const price = Number(item.unitPrice) || 0
+      return sum + (qty * price)
+    }, 0)
+    const total = subtotal + (Number(data.taxAmount) || 0)
+
+    // Ensure customer exists or create
+    let customerId = data.customerId
+    let customer: any = null
+
+    if (customerId) {
+      customer = await prisma.customer.findFirst({ where: { id: customerId, userId: dbUser!.id } })
+      if (!customer) throw Object.assign(new Error('Invalid customer ID or customer does not belong to user'), { statusCode: 400 })
+    } else if (data.customerName || data.customerEmail) {
+      customer = await prisma.customer.findFirst({ where: { email: data.customerEmail || '', userId: dbUser!.id } })
+      if (!customer) {
+        customer = await prisma.customer.create({ data: { userId: dbUser!.id, displayName: data.customerName || 'Customer', email: data.customerEmail || '' } })
       }
+      customerId = customer.id
+    } else {
+      throw Object.assign(new Error('Customer ID or customer information (name/email) is required'), { statusCode: 400 })
     }
 
-    const finalDbUser = (await resolveDbUser(user))
-    if (!finalDbUser) {
-      return NextResponse.json({ error: 'User account not properly set up' }, { status: 400 })
-    }
+    if (!data.invoiceNumber) throw Object.assign(new Error('Invoice number is required'), { statusCode: 400 })
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        userId: finalDbUser.id,
-        customerId: data.customerId,
-        number: data.number,
-        issueDate: new Date(data.invoiceDate),
-        dueDate: new Date(data.dueDate),
-        currency: data.currency,
-        subtotal,
-        taxAmount: data.taxAmount || 0,
-        taxInclusive: data.taxInclusive || false,
-        total: data.total,
-        status: data.status,
-        poNumber: data.poNumber,
-        notes: data.notes,
-        items: {
-          create: data.items.map((item: any) => ({
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.total,
-          })),
+    const invoice = await dbOperation(
+      () => prisma.invoice.create({
+        data: {
+          userId: dbUser!.id,
+          customerId,
+          number: data.invoiceNumber,
+          issueDate: new Date(data.invoiceDate || new Date()),
+          dueDate: new Date(data.dueDate || new Date()),
+          currency: data.currency || 'USD',
+          subtotal: isNaN(subtotal) ? 0 : subtotal,
+          taxAmount: Number(data.taxAmount) || 0,
+          taxInclusive: Boolean(data.taxInclusive),
+          total: isNaN(total) ? 0 : (data.totalAmount || total),
+          status: (data.status || 'draft').toUpperCase() as any,
+          poNumber: data.poNumber || null,
+          notes: data.notes || null,
+          items: {
+            create: data.items.map((item: any) => ({
+              description: item.description || 'Item',
+              quantity: Number(item.quantity) || 1,
+              unitPrice: Number(item.unitPrice) || 0,
+              total: Number(item.total) || (Number(item.quantity || 1) * Number(item.unitPrice || 0))
+            }))
+          }
         },
-      },
-      include: {
-        customer: true,
-        items: true,
-        payments: true,
-      },
-    })
-
-    // Convert Decimal to number for JSON serialization
-    const serializedInvoice = {
-      ...invoice,
-      subtotal: Number(invoice.subtotal),
-      taxAmount: Number(invoice.taxAmount),
-      total: Number(invoice.total),
-      items: invoice.items.map(item => ({
-        ...item,
-        quantity: Number(item.quantity),
-        unitPrice: Number(item.unitPrice),
-        total: Number(item.total),
-      })),
-      payments: invoice.payments.map(payment => ({
-        ...payment,
-        amount: Number(payment.amount),
-      })),
-    }
-
-    return NextResponse.json(serializedInvoice)
-  } catch (error) {
-    console.error('Error creating invoice:', error)
-    return NextResponse.json(
-      { error: 'Failed to create invoice' },
-      { status: 500 }
+        include: { customer: true, items: true, payments: true }
+      }),
+      { operationName: 'Create invoice' }
     )
-  }
-}
+
+    // Serialize decimals
+    return serializeInvoice(invoice)
+  },
+  { cache: false, createUserIfMissing: true }
+)

@@ -1,429 +1,356 @@
+ /**
+ * Optimized Dashboard Page
+ * Uses new unified API, instant skeletons, and progressive loading
+ * Target: <200ms initial load, instant page switching
+ */
+
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
+import { useAuth } from '@/lib/auth-context'
+import { useFetchOnce } from '@/hooks/use-fetch-once'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { 
   Plus, 
-  AlertCircle, 
-  CheckCircle, 
   FileText, 
   Users, 
   DollarSign, 
-  Calendar, 
-  Mic, 
-  Mail, 
-  Download 
+  TrendingUp,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react'
 import { format, isPast, parseISO } from 'date-fns'
-import { formatCurrency as formatCurrencyUtil } from '@/lib/utils'
-import { OnboardingFlow } from '@/components/onboarding-flow'
-import { useAuth } from '@/lib/auth-context'
-import { Invoice, InvoiceStatus } from '@/lib/types'
-import { DashboardSkeleton } from '@/components/loading-skeleton'
+import { formatCurrency } from '@/lib/utils'
+import { 
+  InstantDashboardSkeleton, 
+  ProgressiveLoader 
+} from '@/components/instant-skeletons'
+
+// Dashboard data interface matching API response
+interface DashboardData {
+  recentInvoices: Array<{
+    id: string
+    number: string
+    status: string
+    total: number
+    dueDate: Date
+    updatedAt: Date
+    customer: {
+      displayName: string
+    }
+  }>
+  stats: {
+    totalInvoices: number
+    totalCustomers: number
+    totalEstimates: number
+    overdueInvoices: number
+    paidInvoices: number
+    totalRevenue: number
+    pendingRevenue: number
+  }
+  recentActivity: Array<{
+    id: string
+    type: 'invoice' | 'customer' | 'estimate'
+    action: string
+    date: Date
+    details: string
+  }>
+}
+
+const statusColors = {
+  DRAFT: 'bg-gray-100 text-gray-800',
+  SENT: 'bg-blue-100 text-blue-800',
+  APPROVED: 'bg-yellow-100 text-yellow-800',
+  PAID: 'bg-green-100 text-green-800',
+  OVERDUE: 'bg-red-100 text-red-800',
+  'PARTIALLY_PAID': 'bg-orange-100 text-orange-800'
+} as const
 
 export default function DashboardPage() {
   const { user, userProfile, getAuthHeaders } = useAuth()
-  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  
-  // Show page immediately if user exists, even without full profile
-  const showContent = user !== null
+  const [error, setError] = useState<string | null>(null)
 
-  const fetchInvoices = useCallback(async () => {
-    try {
-      const headers = await getAuthHeaders()
-      const response = await fetch('/api/invoices', { headers })
-      if (response.ok) {
-        const data = await response.json()
-        
-        // Validate invoice data structure and filter out invalid ones
-        const validInvoices = data.filter((invoice: any) => {
-          if (!invoice.status) {
-            console.warn('Invoice missing status:', invoice.id)
-            return false
-          }
-          return true
-        })
-        
-        console.log('Fetched invoices:', validInvoices.length, 'valid out of', data.length, 'total')
-        setInvoices(validInvoices)
-      } else {
-        console.error('Failed to fetch invoices:', response.status, response.statusText)
+  // Memoized stats cards to prevent unnecessary re-renders
+  const statsCards = useMemo(() => {
+    if (!dashboardData?.stats) return []
+
+    const { stats } = dashboardData
+    
+    return [
+      {
+        title: 'Total Invoices',
+        value: stats.totalInvoices,
+        icon: FileText,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-50'
+      },
+      {
+        title: 'Customers',
+        value: stats.totalCustomers,
+        icon: Users,
+        color: 'text-green-600',
+        bgColor: 'bg-green-50'
+      },
+      {
+        title: 'Revenue',
+        value: formatCurrency(stats.totalRevenue, userProfile?.currency || 'USD'),
+        icon: DollarSign,
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50'
+      },
+      {
+        title: 'Pending',
+        value: formatCurrency(stats.pendingRevenue, userProfile?.currency || 'USD'),
+        icon: TrendingUp,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-50'
       }
+    ]
+  }, [dashboardData?.stats, userProfile?.currency])
+
+  // Fast data fetching with error handling
+  const fetchDashboardData = React.useCallback(async () => {
+    if (!user) return
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      const headers = await getAuthHeaders()
+      const response = await fetch('/api/dashboard', { 
+        headers,
+        // Add cache busting for development
+        cache: process.env.NODE_ENV === 'development' ? 'no-cache' : 'default'
+      })
+
+      if (!response.ok) {
+        throw new Error(`Dashboard API error: ${response.status}`)
+      }
+
+      const data: DashboardData = await response.json()
+      setDashboardData(data)
+
     } catch (error) {
-      console.error('Error fetching invoices:', error)
+      console.error('Dashboard fetch error:', error)
+      setError(error instanceof Error ? error.message : 'Failed to load dashboard')
+      
+      // Set empty state to prevent complete failure
+      setDashboardData({
+        recentInvoices: [],
+        stats: {
+          totalInvoices: 0,
+          totalCustomers: 0,
+          totalEstimates: 0,
+          overdueInvoices: 0,
+          paidInvoices: 0,
+          totalRevenue: 0,
+          pendingRevenue: 0
+        },
+        recentActivity: []
+      })
     } finally {
       setLoading(false)
     }
-  }, [getAuthHeaders])
+  }, [user, getAuthHeaders])
 
-  useEffect(() => {
-    if (user) {
-      fetchInvoices()
-    }
-  }, [user, fetchInvoices])
+  // Fetch data on mount - prevent double fetch in strict mode
+  useFetchOnce(fetchDashboardData, [fetchDashboardData])
 
-  // Memoize expensive calculations
-  const overdueInvoices = useMemo(() => {
-    return invoices.filter(invoice => {
-      // Skip invoices with invalid status
-      if (!invoice.status) {
-        console.warn('Invoice with missing status:', invoice.id)
-        return false
-      }
-      
-      const isOverdue = isPast(parseISO(invoice.dueDate.toString())) && 
-                       ![InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.CANCELLED].includes(invoice.status)
-      return isOverdue || invoice.status === InvoiceStatus.OVERDUE
-    }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-  }, [invoices])
+  // Early return for unauthenticated state
+  if (!user) {
+    return <InstantDashboardSkeleton />
+  }
 
-  const paidInvoices = useMemo(() => {
-    return invoices.filter(invoice => 
-      invoice.status && [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID].includes(invoice.status)
-    ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  }, [invoices])
-
-  const dashboardStats = useMemo(() => ({
-    totalOutstanding: overdueInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
-    totalPaid: paidInvoices.reduce((sum, invoice) => sum + invoice.total, 0),
-    totalCustomers: new Set(invoices.map(invoice => invoice.customerId)).size
-  }), [overdueInvoices, paidInvoices, invoices])
-
-  const getStatusBadge = useCallback((status: InvoiceStatus) => {
-    const statusConfig = {
-      [InvoiceStatus.DRAFT]: { label: 'Draft', variant: 'secondary' as const },
-      [InvoiceStatus.SENT]: { label: 'Sent', variant: 'default' as const },
-      [InvoiceStatus.APPROVED]: { label: 'Approved', variant: 'default' as const },
-      [InvoiceStatus.PAID]: { label: 'Paid', variant: 'default' as const },
-      [InvoiceStatus.PARTIALLY_PAID]: { label: 'Partially Paid', variant: 'default' as const },
-      [InvoiceStatus.OVERDUE]: { label: 'Overdue', variant: 'destructive' as const },
-      [InvoiceStatus.CANCELLED]: { label: 'Cancelled', variant: 'secondary' as const },
-    }
-    
-    const config = statusConfig[status]
-    
-    // Add fallback for undefined or unknown status
-    if (!config) {
-      console.warn('Unknown invoice status:', status, 'Type:', typeof status)
-      return <Badge variant="secondary" className="text-xs">Unknown</Badge>
-    }
-    
-    return <Badge variant={config.variant} className="text-xs">{config.label}</Badge>
-  }, [])
-
-  const formatCurrency = useCallback((amount: number, currency?: string) => {
-    return formatCurrencyUtil(amount, currency || userProfile?.currency || 'USD')
-  }, [userProfile?.currency])
-
-  // Show skeleton only if no user at all, not while profile is loading
-  if (!showContent) {
+  // Error state with retry option
+  if (error && !dashboardData) {
     return (
-      <div className="container-mobile">
-        <DashboardSkeleton />
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold mb-2">Dashboard Unavailable</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={fetchDashboardData}>
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  const { totalOutstanding, totalPaid, totalCustomers } = dashboardStats
-
   return (
-    <div className="container-mobile space-y-4 sm:space-y-6">
-      <OnboardingFlow />
-      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-          {userProfile?.businessName ? (
-            <p className="text-lg sm:text-xl text-gray-600 mt-1">
-              Welcome {userProfile.businessName}! 👋
+    <ProgressiveLoader
+      loading={loading}
+      skeleton={<InstantDashboardSkeleton />}
+      minLoadTime={200} // Prevent flash of loading state
+    >
+      <div className="space-y-6">
+        {/* Welcome Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Welcome back{userProfile?.firstName ? `, ${userProfile.firstName}` : ''}!
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Here's what's happening with your business today.
             </p>
-          ) : (
-            <p className="text-lg sm:text-xl text-gray-600 mt-1">
-              Welcome {user?.email?.split('@')[0] || 'User'}! 👋
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-2">
-          <Link href="/dashboard/invoices/voice" prefetch className="w-full sm:w-auto">
-            <Button variant="outline" className="w-full sm:w-auto touch-target">
-              <Mic className="w-4 h-4 mr-2" />
-              <span className="hidden xs:inline">Voice Invoice</span>
-              <span className="xs:hidden">Voice</span>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild>
+              <Link href="/dashboard/invoices/new">
+                <Plus className="h-4 w-4 mr-2" />
+                New Invoice
+              </Link>
             </Button>
-          </Link>
-          <Link href="/dashboard/invoices/new" prefetch className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto touch-target">
-              <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden xs:inline">New Invoice</span>
-              <span className="xs:hidden">New</span>
-            </Button>
-          </Link>
+          </div>
         </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        <Card className="p-3 sm:p-6">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-0 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Total Outstanding</CardTitle>
-            <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-0 pt-2 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold text-red-600">
-              {formatCurrency(totalOutstanding)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {overdueInvoices.length} overdue
-            </p>
-          </CardContent>
-        </Card>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {statsCards.map((stat, index) => {
+            const Icon = stat.icon
+            return (
+              <Card key={index} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        {stat.title}
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stat.value}
+                      </p>
+                    </div>
+                    <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                      <Icon className={`h-6 w-6 ${stat.color}`} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
 
-        <Card className="p-3 sm:p-6">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-0 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Total Paid</CardTitle>
-            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-0 pt-2 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold text-green-600">
-              {formatCurrency(totalPaid)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {paidInvoices.length} paid
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="p-3 sm:p-6">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-0 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Total Invoices</CardTitle>
-            <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-0 pt-2 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold">{invoices.length}</div>
-            <p className="text-xs text-muted-foreground">
-              All time
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="p-3 sm:p-6">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-0 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Customers</CardTitle>
-            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="p-0 pt-2 sm:pt-0">
-            <div className="text-lg sm:text-2xl font-bold">{totalCustomers}</div>
-            <p className="text-xs text-muted-foreground">
-              Active
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Overdue Invoices */}
-      <Card>
-        <CardHeader className="bg-red-50 border-b p-3 sm:p-6">
-          <CardTitle className="flex items-center text-red-700 text-sm sm:text-base">
-            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-            Overdue Invoices
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {overdueInvoices.length === 0 ? (
-            <div className="p-4 sm:p-6 text-center text-gray-500">
-              No overdue invoices
-            </div>
-          ) : (
-            <div className="responsive-table">
-              <div className="block sm:hidden">
-                {/* Mobile Card Layout */}
-                <div className="space-y-3 p-3">
-                  {overdueInvoices.map((invoice) => (
-                    <div key={invoice.id} className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Link 
-                          href={`/dashboard/invoices/${invoice.id}`}
-                          className="text-blue-600 hover:underline font-medium"
-                        >
-                          {invoice.number}
-                        </Link>
-                        {getStatusBadge(invoice.status)}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {invoice.customer?.displayName}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-red-600 text-sm flex items-center">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          {format(new Date(invoice.dueDate), 'MMM dd')}
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Invoices */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Recent Invoices</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard/invoices">View All</Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dashboardData?.recentInvoices.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No invoices yet</p>
+                  <Button asChild className="mt-2">
+                    <Link href="/dashboard/invoices/new">Create Your First Invoice</Link>
+                  </Button>
+                </div>
+              ) : (
+                dashboardData?.recentInvoices.map((invoice) => {
+                  const isOverdue = isPast(new Date(invoice.dueDate)) && invoice.status !== 'PAID'
+                  
+                  return (
+                    <div key={invoice.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2 rounded-full ${isOverdue ? 'bg-red-100' : 'bg-blue-100'}`}>
+                          {isOverdue ? (
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-blue-600" />
+                          )}
                         </div>
-                        <div className="font-medium text-red-600">
-                          {formatCurrency(invoice.total, invoice.currency)}
+                        <div>
+                          <p className="font-medium">#{invoice.number}</p>
+                          <p className="text-sm text-gray-600">{invoice.customer.displayName}</p>
                         </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{formatCurrency(invoice.total, userProfile?.currency || 'USD')}</p>
+                        <Badge className={`text-xs ${statusColors[invoice.status as keyof typeof statusColors] || statusColors.DRAFT}`}>
+                          {invoice.status}
+                        </Badge>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-              <div className="hidden sm:block">
-                {/* Desktop Table Layout */}
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead className="text-right">Amount Owing</TableHead>
-                      <TableHead className="text-center w-48">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {overdueInvoices.map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell>{getStatusBadge(invoice.status)}</TableCell>
-                        <TableCell className="text-red-600 font-medium">
-                          <div className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            {format(new Date(invoice.dueDate), 'MMM dd, yyyy')}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Link 
-                            href={`/dashboard/invoices/${invoice.id}`}
-                            className="text-blue-600 hover:underline"
-                          >
-                            {invoice.number}
-                          </Link>
-                        </TableCell>
-                        <TableCell>{invoice.customer?.displayName}</TableCell>
-                        <TableCell className="text-right font-medium text-red-600">
-                          {formatCurrency(invoice.total, invoice.currency)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center space-x-1">
-                            <Link href={`/dashboard/invoices/${invoice.id}`} title="Record Payment">
-                              <Button size="sm" variant="outline" className="h-8 px-2">
-                                <DollarSign className="w-3 h-3" />
-                                <span className="sr-only">Record Payment</span>
-                              </Button>
-                            </Link>
-                            <Link href={`/dashboard/invoices/${invoice.id}`} title="Email Invoice">
-                              <Button size="sm" variant="outline" className="h-8 px-2">
-                                <Mail className="w-3 h-3" />
-                                <span className="sr-only">Email Invoice</span>
-                              </Button>
-                            </Link>
-                            <Link href={`/dashboard/invoices/${invoice.id}`} title="Download PDF">
-                              <Button size="sm" variant="outline" className="h-8 px-2">
-                                <Download className="w-3 h-3" />
-                                <span className="sr-only">Download PDF</span>
-                              </Button>
-                            </Link>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  )
+                })
+              )}
+            </CardContent>
+          </Card>
 
-      {/* Paid Invoices */}
-      <Card>
-        <CardHeader className="bg-green-50 border-b p-3 sm:p-6">
-          <CardTitle className="flex items-center text-green-700 text-sm sm:text-base">
-            <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-            Paid Invoices
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {paidInvoices.length === 0 ? (
-            <div className="p-4 sm:p-6 text-center text-gray-500">
-              No paid invoices yet
-            </div>
-          ) : (
-            <div className="responsive-table">
-              <div className="block sm:hidden">
-                {/* Mobile Card Layout */}
-                <div className="space-y-3 p-3">
-                  {paidInvoices.slice(0, 10).map((invoice) => (
-                    <div key={invoice.id} className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Link 
-                          href={`/dashboard/invoices/${invoice.id}`}
-                          className="text-blue-600 hover:underline font-medium"
-                        >
-                          {invoice.number}
-                        </Link>
-                        {getStatusBadge(invoice.status)}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {invoice.customer?.displayName}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-green-600 text-sm flex items-center">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          {format(new Date(invoice.updatedAt), 'MMM dd')}
-                        </div>
-                        <div className="font-medium text-green-600">
-                          {formatCurrency(invoice.total, invoice.currency)}
-                        </div>
-                      </div>
+          {/* Quick Actions & Recent Activity */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/dashboard/invoices/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create New Invoice
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/dashboard/customers">
+                  <Users className="h-4 w-4 mr-2" />
+                  Manage Customers
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/dashboard/estimates/new">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Create Estimate
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/dashboard/reports">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  View Reports
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity */}
+        {dashboardData?.recentActivity && dashboardData.recentActivity.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {dashboardData.recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex items-center space-x-3 text-sm">
+                    <div className="p-1 rounded-full bg-gray-100">
+                      {activity.type === 'invoice' && <FileText className="h-3 w-3" />}
+                      {activity.type === 'customer' && <Users className="h-3 w-3" />}
+                      {activity.type === 'estimate' && <FileText className="h-3 w-3" />}
                     </div>
-                  ))}
-                </div>
+                    <div className="flex-1">
+                      <span className="font-medium">{activity.action}</span>
+                      <span className="text-gray-600 ml-1">{activity.details}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {format(new Date(activity.date), 'MMM dd, HH:mm')}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="hidden sm:block">
-                {/* Desktop Table Layout */}
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Date Paid</TableHead>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead className="text-right">Amount Paid</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paidInvoices.slice(0, 10).map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell>{getStatusBadge(invoice.status)}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            {format(new Date(invoice.updatedAt), 'MMM dd, yyyy')}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Link 
-                            href={`/dashboard/invoices/${invoice.id}`}
-                            className="text-blue-600 hover:underline"
-                          >
-                            {invoice.number}
-                          </Link>
-                        </TableCell>
-                        <TableCell>{invoice.customer?.displayName}</TableCell>
-                        <TableCell className="text-right font-medium text-green-600">
-                          {formatCurrency(invoice.total, invoice.currency)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </ProgressiveLoader>
   )
 }
