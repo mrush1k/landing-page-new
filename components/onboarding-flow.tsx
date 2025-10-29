@@ -22,7 +22,7 @@ interface OnboardingStep {
 }
 
 export function OnboardingFlow() {
-  const { userProfile, updateUser } = useAuth()
+  const { userProfile, updateUserProfile } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [steps, setSteps] = useState<OnboardingStep[]>([
@@ -128,7 +128,7 @@ export function OnboardingFlow() {
           })
         }
         hasSubmittedRef.current = true
-        updateUser({ ...userProfile, onboardingCompleted: true })
+        updateUserProfile({ ...userProfile, onboardingCompleted: true })
       } else {
         hasSubmittedRef.current = true
         // Fallback: attempt network call if we don't have userProfile
@@ -138,7 +138,7 @@ export function OnboardingFlow() {
       console.error('Failed to mark onboarding as complete:', error)
     }
     if (userProfile) {
-      updateUser({ ...userProfile, onboardingCompleted: true })
+      updateUserProfile({ ...userProfile, onboardingCompleted: true })
     }
     setIsOpen(false)
   }

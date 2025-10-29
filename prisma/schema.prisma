@@ -87,6 +87,8 @@ model Customer {
   @@index([userId])
   @@index([email])
   @@index([createdAt])
+  // Dashboard performance indexes
+  @@index([userId, updatedAt], map: "customer_activity_idx")
   @@map("customers")
 }
 
@@ -147,6 +149,10 @@ model Invoice {
   @@index([userId, status, updatedAt])
   @@index([userId, deletedAt, status, dueDate])
   @@index([updatedAt, status])
+  // Critical dashboard performance indexes
+  @@index([userId, deletedAt, updatedAt], map: "dashboard_recent_idx")
+  @@index([userId, deletedAt, status, total], map: "dashboard_stats_idx") 
+  @@index([userId, deletedAt, createdAt], map: "dashboard_activity_idx")
   @@map("invoices")
 }
 
@@ -192,6 +198,8 @@ model Estimate {
   @@index([customerId])
   @@index([status])
   @@index([createdAt])
+  // Dashboard performance indexes
+  @@index([userId, status, total], map: "estimate_stats_idx")
   @@map("estimates")
 }
 

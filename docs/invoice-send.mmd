@@ -1,0 +1,50 @@
+sequenceDiagram
+  participant User
+  participant Frontend as Browser(UI)
+  participant SupabaseClient as Supabase(Client)
+  participant API as NextAPI
+  participant SupabaseServer as Supabase(Server)
+  participant Prisma as DB
+  participant Background as BackgroundWorker
+  participant Email as SMTP
+  participant PDF as PDFGenerator
+
+  User->>Frontend: Open email modal, click Send
+  Frontend->>SupabaseClient: getAuthHeaders()
+  SupabaseClient-->>Frontend: access_token
+  Frontend->>API: POST /api/invoices/:id/send (recipient, cc, message)
+
+  API->>SupabaseServer: supabase.auth.getUser()
+  SupabaseServer-->>API: supabase user
+  API->>Prisma: prisma.invoice.findUnique({ include: customer, items })
+  Prisma-->>API: invoice data
+  API->>Prisma: prisma.user.findUnique({ id })
+  Prisma-->>API: user profile
+
+  alt missing recipient
+    API-->>Frontend: 400 - No recipient
+    return
+  end
+
+  API->>Prisma: prisma.invoice.update( set sentTo, lastEmailSentAt, emailCount++, deliveryStatus: 'queued', maybe status->SENT )
+  Prisma-->>API: updated invoice
+  API-->>Frontend: 200 queued response (fast)
+
+  Note over API,Background: Fire-and-forget background send (IIFE)
+  API->>Background: start background task (no await)
+
+  Background->>Prisma: prisma.invoice.findUnique({ include: items, customer, payments })
+  Prisma-->>Background: freshInvoice
+  Background->>Prisma: prisma.user.findUnique({ id })
+  Prisma-->>Background: freshUserProfile
+  Background->>PDF: generateInvoicePDF(freshInvoice, freshUserProfile)
+  PDF-->>Background: PDF buffer (may load remote logo images)
+  Background->>Email: transporter.sendMail({ attachments: [pdf] })
+  Email-->>Background: send result
+  alt success
+    Background->>Prisma: prisma.invoice.update({ deliveryStatus: 'sent', emailDelivered: true })
+  else failure
+    Background->>Prisma: prisma.invoice.update({ deliveryStatus: 'failed' })
+  end
+
+  Background-->>API: (no direct response; logs only)

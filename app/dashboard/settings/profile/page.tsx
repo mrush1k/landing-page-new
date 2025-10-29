@@ -31,7 +31,7 @@ const workTypes = [
 ]
 
 export default function ProfileSettingsPage() {
-  const { userProfile: user, updateUser } = useAuth()
+  const { userProfile: user, updateUserProfile } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   
@@ -92,7 +92,7 @@ export default function ProfileSettingsPage() {
 
       if (response.ok) {
         const updatedUser = await response.json()
-        updateUser(updatedUser)
+        updateUserProfile(updatedUser)
         toast({
           title: "Profile Updated",
           description: "Your profile has been updated successfully."

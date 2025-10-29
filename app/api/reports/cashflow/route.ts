@@ -27,40 +27,61 @@ export async function GET(request: NextRequest) {
     const endDate = new Date(year + 1, 0, 1) // January 1st of the next year
     const currentDate = new Date()
 
-    // Single query with all conditions using raw SQL for better performance
-    const [paidInvoicesRaw, outstandingInvoicesRaw] = await Promise.all([
-      // Paid invoices for the year with monthly aggregation
-      withRetry(() => 
-        prisma.$queryRaw<Array<{month: number, total: number}>>`
-          SELECT 
-            EXTRACT(MONTH FROM "updatedAt")::integer as month,
-            SUM("total")::float as total
-          FROM "Invoice"
-          WHERE "userId" = ${user.id}
-            AND "status" = 'PAID'
-            AND "deletedAt" IS NULL
-            AND "updatedAt" >= ${startDate}
-            AND "updatedAt" < ${endDate}
-          GROUP BY EXTRACT(MONTH FROM "updatedAt")
-          ORDER BY month
-        `
-      ),
-      // Outstanding invoices (overdue and pending)
+    // Optimized queries using Prisma methods (safer than raw SQL)
+    const [paidInvoices, overdueInvoices, pendingInvoices] = await Promise.all([
+      // Paid invoices for the year
       withRetry(() =>
-        prisma.$queryRaw<Array<{status: string, count: number, total: number}>>`
-          SELECT 
-            CASE 
-              WHEN "dueDate" < ${currentDate} THEN 'overdue'
-              ELSE 'pending'
-            END as status,
-            COUNT(*)::integer as count,
-            SUM("total")::float as total
-          FROM "Invoice"
-          WHERE "userId" = ${user.id}
-            AND "deletedAt" IS NULL
-            AND "status" IN ('SENT', 'READ')
-          GROUP BY (CASE WHEN "dueDate" < ${currentDate} THEN 'overdue' ELSE 'pending' END)
-        `
+        prisma.invoice.findMany({
+          where: {
+            userId: user.id,
+            status: 'PAID',
+            deletedAt: null,
+            updatedAt: {
+              gte: startDate,
+              lt: endDate
+            }
+          },
+          select: {
+            total: true,
+            updatedAt: true
+          }
+        })
+      ),
+      // Overdue invoices
+      withRetry(() =>
+        prisma.invoice.findMany({
+          where: {
+            userId: user.id,
+            deletedAt: null,
+            status: {
+              in: ['SENT', 'READ']
+            },
+            dueDate: {
+              lt: currentDate
+            }
+          },
+          select: {
+            total: true
+          }
+        })
+      ),
+      // Pending invoices
+      withRetry(() =>
+        prisma.invoice.findMany({
+          where: {
+            userId: user.id,
+            deletedAt: null,
+            status: {
+              in: ['SENT', 'READ']
+            },
+            dueDate: {
+              gte: currentDate
+            }
+          },
+          select: {
+            total: true
+          }
+        })
       )
     ])
 
@@ -71,16 +92,18 @@ export async function GET(request: NextRequest) {
       year: year
     }))
 
-    // Populate monthly data from query results
-    paidInvoicesRaw.forEach(row => {
-      if (row.month >= 1 && row.month <= 12) {
-        monthlyData[row.month - 1].income = Number(row.total || 0)
-      }
+    // Process paid invoices by month
+    paidInvoices.forEach(invoice => {
+      const monthIndex = new Date(invoice.updatedAt).getMonth()
+      monthlyData[monthIndex].income += Number(invoice.total || 0)
     })
 
     // Process outstanding balances
-    const overdueData = outstandingInvoicesRaw.find(row => row.status === 'overdue') || { count: 0, total: 0 }
-    const pendingData = outstandingInvoicesRaw.find(row => row.status === 'pending') || { count: 0, total: 0 }
+    const overdueTotal = overdueInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0)
+    const pendingTotal = pendingInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0)
+    
+    const overdueData = { count: overdueInvoices.length, total: overdueTotal }
+    const pendingData = { count: pendingInvoices.length, total: pendingTotal }
 
     const response = {
       monthlyData,

@@ -1,10 +1,11 @@
 "use client"
 
-import { createContext, useEffect, useState, useContext } from 'react'
+import { createContext, useEffect, useState, useContext, useCallback, useRef } from 'react'
 import { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/utils/supabase/client'
 import { User } from './types'
 import { performanceMonitor } from './performance-monitor'
+import { FastUserCache } from './fast-user-cache'
 
 interface AuthContextType {
   user: SupabaseUser | null
@@ -15,40 +16,127 @@ interface AuthContextType {
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: any }>
   getAuthHeaders: () => Promise<HeadersInit>
-  updateUser: (userData: User) => void
+  updateUserProfile: (userData: User) => void
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+// Request deduplication for profile fetches
+const pendingProfileFetches = new Map<string, Promise<User | null>>()
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [userProfile, setUserProfile] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [profileLastFetched, setProfileLastFetched] = useState<number>(0)
   const supabase = createClient()
+  
+  // Use ref to prevent effect re-runs
+  const profileFetchedRef = useRef(false)
 
-  // Cache TTL: 5 minutes (300000ms)
-  const PROFILE_CACHE_TTL = 300000
-
-  const isProfileStale = () => {
-    return Date.now() - profileLastFetched > PROFILE_CACHE_TTL
+  // Helper to create fallback profile
+  const createFallbackProfile = (supabaseUser: SupabaseUser): User => {
+    const metadata = supabaseUser.user_metadata || {}
+    return {
+      id: supabaseUser.id,
+      email: supabaseUser.email || '',
+      username: supabaseUser.email?.split('@')[0] || 'user',
+      displayName: metadata.name || metadata.full_name || metadata.fullName || supabaseUser.email?.split('@')[0] || 'User',
+      firstName: metadata.given_name || metadata.firstName || '',
+      lastName: metadata.family_name || metadata.lastName || '',
+      country: metadata.country || 'US',
+      currency: metadata.currency || 'USD',
+      onboardingCompleted: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
   }
 
+  // Optimized profile fetch with request deduplication and FastUserCache
+  const fetchUserProfile = useCallback(async (userId: string) => {
+    // Check for pending request to avoid duplicate fetches
+    if (pendingProfileFetches.has(userId)) {
+      const profile = await pendingProfileFetches.get(userId)!
+      if (profile) setUserProfile(profile)
+      return
+    }
+
+    const fetchPromise = (async (): Promise<User | null> => {
+      try {
+        performanceMonitor.startTimer('profile-fetch')
+        
+        // Try FastUserCache first (0-5ms lookup)
+        const cachedProfile = await FastUserCache.getUser({ id: userId })
+        if (cachedProfile) {
+          const duration = performanceMonitor.endTimer('profile-fetch')
+          setUserProfile(cachedProfile as any as User)
+          return cachedProfile as any as User
+        }
+
+        // Cache miss - fetch from API
+        const response = await fetch(`/api/users/${userId}`)
+        
+        if (response.ok) {
+          const profile = await response.json()
+          performanceMonitor.endTimer('profile-fetch')
+          setUserProfile(profile)
+          return profile
+        }
+
+        // API failed - create fallback profile
+        performanceMonitor.endTimer('profile-fetch')
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) {
+          const fallbackProfile = createFallbackProfile(session.user)
+          setUserProfile(fallbackProfile)
+          return fallbackProfile
+        }
+        
+        return null
+      } catch (error) {
+        console.error('Error fetching user profile:', error)
+        performanceMonitor.endTimer('profile-fetch')
+        
+        // Create fallback profile from Supabase user data
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.user) {
+            const fallbackProfile = createFallbackProfile(session.user)
+            setUserProfile(fallbackProfile)
+            return fallbackProfile
+          }
+        } catch (fallbackError) {
+          console.error('Error creating fallback profile:', fallbackError)
+        }
+        
+        return null
+      } finally {
+        // Clear pending request
+        pendingProfileFetches.delete(userId)
+      }
+    })()
+
+    pendingProfileFetches.set(userId, fetchPromise)
+    await fetchPromise
+  }, [supabase])
+
   useEffect(() => {
+    // Prevent duplicate fetches
+    if (profileFetchedRef.current) return
+    
     performanceMonitor.startTimer('auth-initialization')
     
     // Get initial session with faster loading
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
+        profileFetchedRef.current = true
         // Set loading to false immediately for faster page rendering
         setLoading(false)
         performanceMonitor.endTimer('auth-initialization')
         
         // Fetch profile in background without blocking UI
-        if (!userProfile || isProfileStale()) {
-          fetchUserProfile(session.user.id)
-        }
+        fetchUserProfile(session.user.id)
       } else {
         setLoading(false)
         performanceMonitor.endTimer('auth-initialization')
@@ -63,79 +151,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         // Set loading to false immediately
         setLoading(false)
-        // Only refetch profile if it's stale or missing, in background
-        if (!userProfile || isProfileStale()) {
-          fetchUserProfile(session.user.id)
-        }
+        // Fetch profile in background
+        fetchUserProfile(session.user.id)
       } else {
         setUserProfile(null)
-        setProfileLastFetched(0)
+        profileFetchedRef.current = false
+        // Clear cache on sign out
+        pendingProfileFetches.clear()
         setLoading(false)
       }
     })
 
     return () => subscription.unsubscribe()
-  }, [supabase.auth])
-
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      performanceMonitor.startTimer('profile-fetch')
-      
-      // Don't set loading true - fetch profile in background
-      const response = await fetch(`/api/users/${userId}`)
-      if (response.ok) {
-        const profile = await response.json()
-        setUserProfile(profile)
-        setProfileLastFetched(Date.now())
-        
-        performanceMonitor.endTimer('profile-fetch')
-      } else {
-        // If API fails, create fallback profile from Supabase user data
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user) {
-          const fallbackProfile: any = {
-            id: session.user.id,
-            email: session.user.email || '',
-            username: session.user.email?.split('@')[0] || 'user',
-            displayName: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-            firstName: session.user.user_metadata?.given_name || '',
-            lastName: session.user.user_metadata?.family_name || '',
-            country: 'US',
-            currency: 'USD',
-            onboardingCompleted: false,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-          setUserProfile(fallbackProfile)
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching user profile:', error)
-      // Create fallback profile from Supabase user data in case of network error
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user) {
-          const fallbackProfile: any = {
-            id: session.user.id,
-            email: session.user.email || '',
-            username: session.user.email?.split('@')[0] || 'user',
-            displayName: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-            firstName: session.user.user_metadata?.given_name || '',
-            lastName: session.user.user_metadata?.family_name || '',
-            country: 'US',
-            currency: 'USD',
-            onboardingCompleted: false,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-          setUserProfile(fallbackProfile)
-        }
-      } catch (fallbackError) {
-        console.error('Error creating fallback profile:', fallbackError)
-      }
-    }
-    // Remove finally block - don't set loading false here since we're not blocking
-  }
+  }, [fetchUserProfile])
 
   const signUp = async (email: string, password: string, userData: Partial<User>) => {
     try {
@@ -229,17 +257,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error }
   }
 
-  const getAuthHeaders = async (): Promise<HeadersInit> => {
+  const getAuthHeaders = useCallback(async (): Promise<HeadersInit> => {
     const { data: { session } } = await supabase.auth.getSession()
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session?.access_token}`,
     }
-  }
+  }, [supabase])
 
-  const updateUser = (userData: User) => {
+  const updateUserProfile = (userData: User) => {
     setUserProfile(userData)
   }
+
+  const refreshProfile = useCallback(async () => {
+    if (user) {
+      profileFetchedRef.current = false
+      await fetchUserProfile(user.id)
+    }
+  }, [user, fetchUserProfile])
 
   return (
     <AuthContext.Provider
@@ -252,7 +287,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         resetPassword,
         getAuthHeaders,
-        updateUser,
+        updateUserProfile,
+        refreshProfile,
       }}
     >
       {children}

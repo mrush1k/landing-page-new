@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import { cookies } from 'next/headers'
-import jwt from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
+import { createClient } from '@/utils/supabase/server'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export const dynamic = 'force-dynamic'
 
 import { prisma } from '@/lib/prisma'
 
+const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { businessName } = body
 
@@ -20,31 +27,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const cookieStore = await cookies()
-    const authCookie = cookieStore.get('auth_token')?.value
-
-    if (!authCookie) {
-      return NextResponse.json(
-        { error: 'Authentication required' }, 
-        { status: 401 }
-      )
-    }
-
-    const decoded = jwt.verify(authCookie, process.env.JWT_SECRET || 'fallback-secret') as { id: string }
-
     // Generate a simple text-based logo using Canvas API or a simple SVG
-    const logoPrompt = `Modern minimal logo for ${businessName}`
+    const logoPrompt = `Create a modern, professional, minimalist logo for a business called "${businessName}". The text should be in a clean, bold, sans-serif font. Include a simple, stylized icon that represents the business seamlessly integrated with the text. Use a professional color scheme with good contrast. The design should be suitable for invoices and business documents.`
     
-    // For now, create a simple text-based logo using Canvas-style design
-    // In production, this would call OpenAI DALL-E API or similar service
-    const logoSvg = generateSimpleTextLogo(businessName)
+    let logoDataUrl: string = ''
     
-    // Convert SVG to base64 data URL for storage
-    const logoDataUrl = `data:image/svg+xml;base64,${Buffer.from(logoSvg).toString('base64')}`
+    try {
+      // Use gemini-2.5-flash-image model for image generation
+      const model = genai.getGenerativeModel({ model: 'gemini-2.5-flash-image' })
+      
+      const response = await model.generateContent(logoPrompt)
+
+      const result = await response.response
+      
+      // Check if response contains image data in candidates
+      if (result.candidates && result.candidates.length > 0) {
+        const candidate = result.candidates[0]
+        
+        if (candidate.content && candidate.content.parts) {
+          // Look for inline data (base64 image)
+          for (const part of candidate.content.parts) {
+            if ('inlineData' in part && part.inlineData) {
+              const base64Data = part.inlineData.data
+              const mimeType = part.inlineData.mimeType || 'image/png'
+              logoDataUrl = `data:${mimeType};base64,${base64Data}`
+              console.log('Gemini image generation successful for:', businessName)
+              break
+            }
+          }
+        }
+      }
+      
+      // If no image data found, use fallback
+      if (!logoDataUrl) {
+        console.warn('Gemini did not return image data, using fallback')
+        logoDataUrl = `data:image/svg+xml;base64,${Buffer.from(generateSimpleTextLogo(businessName)).toString('base64')}`
+      }
+      
+    } catch (geminiError) {
+      console.warn('Gemini image generation failed, using fallback:', geminiError)
+      // Fallback to simple text-based logo
+      logoDataUrl = `data:image/svg+xml;base64,${Buffer.from(generateSimpleTextLogo(businessName)).toString('base64')}`
+    }
 
     // Save logo info to user database
     const updatedUser = await prisma.user.update({
-      where: { id: decoded.id },
+      where: { id: user.id },
       data: {
         aiLogoUrl: logoDataUrl,
         aiLogoPrompt: logoPrompt,

@@ -33,7 +33,9 @@ export default function LoginPage() {
       setError(error.message || 'Failed to sign in')
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      // Use window.location to force a full page reload
+      // This ensures auth context fully initializes before dashboard renders
+      window.location.href = '/dashboard'
     }
   }
 

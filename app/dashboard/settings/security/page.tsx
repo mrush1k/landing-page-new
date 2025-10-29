@@ -14,9 +14,7 @@ export default function SecuritySettingsPage() {
   const exportData = async () => {
     try {
       const response = await fetch('/api/users/export', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        credentials: 'include'
       })
       
       if (response.ok) {

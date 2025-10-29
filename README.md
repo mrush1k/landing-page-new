@@ -288,7 +288,10 @@ If you'd like, I can now:
 - expand the `app/api/` section with a file-by-file list,
 - add a CONTRIBUTING.md with dev conventions, or
 - generate a short developer quickstart (one-liner commands and env checklist).
-#   i n v o i c e - d e m o - l a n d  
- #   l a n d i n g - p a g e - n e w  
- #   l a n d i n g - p a g e - n e w  
+#   i n v o i c e - d e m o - l a n d 
+ 
+ #   l a n d i n g - p a g e - n e w 
+ 
+ #   l a n d i n g - p a g e - n e w 
+ 
  
