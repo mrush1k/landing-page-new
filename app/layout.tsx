@@ -5,6 +5,7 @@ import { AuthProvider } from '@/lib/auth-context';
 // ThemeProvider removed to disable dark-mode toggling
 import { DiagnosticProvider } from '@/components/diagnostic-provider';
 import { Toaster } from '@/components/ui/toaster';
+import Cursor from '@/components/Cursor';
 
 // Auto-initialize PDF generator for instant performance
 if (typeof window === 'undefined') {
@@ -46,6 +47,7 @@ export default function RootLayout({
       <body className={`${inter.className} no-scroll-x`}>
         <AuthProvider>
           <DiagnosticProvider>
+            <Cursor />
             {children}
             <Toaster />
           </DiagnosticProvider>

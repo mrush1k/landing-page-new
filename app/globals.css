@@ -93,6 +93,13 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Hide default cursor on non-touch devices - custom cursor will be used */
+  @media (hover: hover) and (pointer: fine) {
+    * {
+      cursor: none !important;
+    }
+  }
 }
 
 /* Custom utility classes for theme colors */
